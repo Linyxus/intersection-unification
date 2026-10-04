@@ -6,7 +6,8 @@ import Resolution.Computability
 `Problem.smallCheck P n` searches all substitutions sending the variables of `P` to ground
 types over the constants of `P` of size at most `n`. It is primitive recursive, sound, and
 complete for unifiers of that shape. Hence any primitive recursive bound on the size of
-small ground unifiers yields decidability of unifiability.
+small ground unifiers yields decidability of unifiability (`computablePred_of_bound`). The
+bound itself, `bigBound`, is established in `Resolution.Final`.
 -/
 
 namespace Intersection
@@ -146,12 +147,15 @@ def Problem.smallCheck (P : Problem) (n : ℕ) : Bool :=
     P.all fun e => decide (Eqv (e.1.subst (substOf P.varList ts))
       (e.2.subst (substOf P.varList ts)))
 
+/-- Soundness of the search. -/
 theorem Problem.smallCheck_sound {P : Problem} {n : ℕ} (h : P.smallCheck n = true) :
     Unifiable P := by
   simp only [Problem.smallCheck, List.any_eq_true, List.all_eq_true, decide_eq_true_eq] at h
   obtain ⟨ts, -, hts⟩ := h
   exact ⟨_, hts⟩
 
+/-- Completeness of the search for unifiers that are ground over the constants of the problem
+and of size at most `n`. -/
 theorem Problem.smallCheck_complete {P : Problem} {n : ℕ} (S : ℕ → Ty)
     (hS : ∀ e ∈ P, Eqv (e.1.subst S) (e.2.subst S))
     (hg : ∀ x ∈ P.varList, (S x).GroundIn P.constList ∧ (S x).size ≤ n) :
@@ -265,6 +269,7 @@ theorem primrec_substData : Primrec₂ substData :=
       rcases b with ⟨d, τ⟩
       cases τ <;> simp [substDataStep, substData, Ty.elim, Ty.subst])
 
+/-- The search is primitive recursive. -/
 theorem Problem.primrec_smallCheck : Primrec₂ Problem.smallCheck := by
   have hinner : Primrec₂ fun (q : Problem × ℕ) (ts : List Ty) =>
       q.1.all fun e => decide (Eqv (substData (q.1.varList, ts) e.1)
@@ -290,6 +295,8 @@ end Prim
 
 /-! ## Decidability from a bound -/
 
+/-- **Decidability from a bound.** If every unifiable problem has a ground unifier over its own
+constants of size at most a primitive recursive `B P`, then unifiability is computable. -/
 theorem computablePred_of_bound (B : Problem → ℕ) (hB : Primrec B)
     (hsmall : ∀ P, Unifiable P → ∃ S, (∀ e ∈ P, Eqv (e.1.subst S) (e.2.subst S)) ∧
       ∀ x ∈ P.varList, (S x).GroundIn P.constList ∧ (S x).size ≤ B P) :

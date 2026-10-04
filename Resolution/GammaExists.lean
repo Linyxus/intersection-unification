@@ -3,8 +3,10 @@ import Resolution.GammaData
 /-!
 # Existence of the finite letter set Γ
 
-From the letter bound we obtain a solution `S` whose letters all lie in a finite list `L`.
-`Γ` is a dedup (up to `≡`) of the meets of all sublists of `L`.
+From the letter bound (`letter_bound_strong`) we obtain a unifier `S` whose letters all lie in
+a finite, letter-closed list `L` of at most `4 ^ n` types. The letter set `Γ` is the list of
+the meets of all sublists of `L`, deduplicated up to `≡` by `dedupEqv`. This makes it closed
+under `∩` and gives `|Γ| ≤ 2 ^ (4 ^ n + 1)`. The result is `GammaData.exists`.
 -/
 
 namespace Intersection
@@ -16,6 +18,7 @@ noncomputable def dedupEqv : List Ty → List Ty
   | [] => []
   | x :: l => if ∃ y ∈ dedupEqv l, Eqv x y then dedupEqv l else x :: dedupEqv l
 
+/-- `dedupEqv l` is a sublist of `l`. -/
 theorem dedupEqv_sublist : ∀ l : List Ty, (dedupEqv l).Sublist l
   | [] => by simp [dedupEqv]
   | x :: l => by
@@ -24,6 +27,7 @@ theorem dedupEqv_sublist : ∀ l : List Ty, (dedupEqv l).Sublist l
     · exact (dedupEqv_sublist l).cons x
     · exact (dedupEqv_sublist l).cons_cons x
 
+/-- The elements of `dedupEqv l` are pairwise inequivalent. -/
 theorem dedupEqv_pairwise : ∀ l : List Ty, (dedupEqv l).Pairwise (fun g h => ¬ Eqv g h)
   | [] => by simp [dedupEqv]
   | x :: l => by
@@ -32,6 +36,7 @@ theorem dedupEqv_pairwise : ∀ l : List Ty, (dedupEqv l).Pairwise (fun g h => �
     · exact dedupEqv_pairwise l
     · refine List.Pairwise.cons (fun y hy hxy => h ⟨y, hy, hxy⟩) (dedupEqv_pairwise l)
 
+/-- Every element of `l` is equivalent to an element of `dedupEqv l`. -/
 theorem dedupEqv_cover : ∀ l : List Ty, ∀ x ∈ l, ∃ y ∈ dedupEqv l, Eqv x y
   | [], x, hx => by simp at hx
   | z :: l, x, hx => by
@@ -76,6 +81,7 @@ theorem Problem.isSubterm_of_arrow {P : Problem} {σ τ : Ty} (h : P.IsSubterm (
   have hσ : σ ∈ (Ty.arrow σ τ).subterms := by simp [Ty.subterms, Ty.mem_subterms_self]
   exact ⟨e, he, h.imp (Ty.mem_subterms_trans hσ) (Ty.mem_subterms_trans hσ)⟩
 
+/-- **Existence of the letter set.** Every unifiable problem has a `GammaData`. -/
 theorem GammaData.exists (P : Problem) (h : Unifiable P) : Nonempty (GammaData P) := by
   obtain ⟨S₀, hS₀⟩ := h
   obtain ⟨hc, hsol, hcL, hLlen, -, hrepL, -⟩ := letter_bound_strong P S₀ hS₀

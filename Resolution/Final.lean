@@ -6,10 +6,12 @@ import Resolution.APD
 /-!
 # Final assembly: decidability of unifiability
 
-We chain the letter bound (`GammaData.exists`), the completeness of AP(D) (`APD.complete`),
-the small model property of multi-level problems (`MLP.small_model`) and the realization
-(`APD.realize`) into an explicit primitive recursive bound on the size of small ground
-unifiers, and conclude with `computablePred_of_bound`.
+The letter bound (`GammaData.exists`), the completeness of the abstract problem
+(`APD.complete`), the small-model theorem for multi-level problems (`MLP.small_model`) and
+the realisation (`APD.realize`) are chained into an explicit primitive recursive bound
+`bigBound P` on the size of a ground unifier of a unifiable problem `P`
+(`small_ground_solution`). The bounded search of `Resolution.Decide` then gives
+`decidable_final : ComputablePred Unifiable`.
 -/
 
 namespace Intersection
@@ -132,6 +134,8 @@ def bigBound (P : Problem) : ℕ :=
   let M := 2 ^ (4 ^ s + 1)
   realizeBound (towerBound ((2 ^ s) ^ M) M ((2 ^ s) ^ (s + M))) M s
 
+/-- **Small ground unifiers.** Every unifiable problem has a ground unifier over its own
+constants whose values have size at most `bigBound P`. -/
 theorem small_ground_solution (P : Problem) (h : Unifiable P) :
     ∃ S : ℕ → Ty, (∀ e ∈ P, Eqv (e.1.subst S) (e.2.subst S)) ∧
       ∀ x ∈ P.varList, (S x).GroundIn P.constList ∧ (S x).size ≤ bigBound P := by
@@ -141,7 +145,8 @@ theorem small_ground_solution (P : Problem) (h : Unifiable P) :
   set M := 2 ^ (4 ^ s + 1) with hM
   have hm : D.Γ.length ≤ M :=
     D.length_le.trans (Nat.pow_le_pow_right (by norm_num)
-      (by have := Nat.pow_le_pow_right (show 4 > 0 by norm_num) (show P.letterSubterms.length ≤ s from P.letterSubterms_length_le)
+      (by have := Nat.pow_le_pow_right (show 4 > 0 by norm_num)
+            (show P.letterSubterms.length ≤ s from P.letterSubterms_length_le)
           omega))
   have ha : P.consts.length ≤ s := P.consts_length_le
   have he : P.entities.length ≤ s := P.entities_length_le
@@ -188,6 +193,7 @@ theorem towerBound_eq_iterate (f : ℕ) : ∀ R q acc,
       simp only [towerBound, towerStep]
       omega
 
+/-- The tower bound is primitive recursive. -/
 theorem primrec_towerBound : Primrec fun p : ℕ × ℕ × ℕ => towerBound p.1 p.2.1 p.2.2 := by
   have hstep : Primrec₂ fun (p : ℕ × ℕ × ℕ) (x : ℕ × ℕ) => towerStep p.1 x := by
     refine Primrec₂.mk (Primrec.pair ?_ ?_)
@@ -206,6 +212,7 @@ theorem tbAux_eq_iterate (N m a : ℕ) : ∀ d,
   | d + 1 => by
       rw [Function.iterate_succ_apply', ← tbAux_eq_iterate N m a d]; rfl
 
+/-- The realisation bound is primitive recursive. -/
 theorem primrec_realizeBound : Primrec fun p : ℕ × ℕ × ℕ => realizeBound p.1 p.2.1 p.2.2 := by
   have hstep : Primrec₂ fun (p : ℕ × ℕ × ℕ) (t : ℕ) =>
       (p.2.1 + 1) ^ p.1 * p.2.2 * (p.1 * (t + 1) + 2) + 1 := by
@@ -223,6 +230,7 @@ theorem Problem.primrec_totalSize : Primrec Problem.totalSize :=
     ((nat_add.comp (Ty.primrec_size.comp (fst.comp snd))
       (Ty.primrec_size.comp (snd.comp snd))).to₂))
 
+/-- The bound is primitive recursive. -/
 theorem primrec_bigBound : Primrec bigBound := by
   have hs := Problem.primrec_totalSize
   have hM : Primrec fun P : Problem => 2 ^ (4 ^ P.totalSize + 1) :=
@@ -237,6 +245,7 @@ theorem primrec_bigBound : Primrec bigBound := by
 
 end Prim
 
+/-- **Unifiability of intersection types is decidable.** -/
 theorem decidable_final : ComputablePred Unifiable :=
   computablePred_of_bound bigBound primrec_bigBound small_ground_solution
 

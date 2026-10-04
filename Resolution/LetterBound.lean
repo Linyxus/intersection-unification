@@ -4,6 +4,40 @@ import Mathlib.Order.Lattice.Nat
 import Mathlib.Data.Fintype.Prod
 import Mathlib.Data.Fintype.Powerset
 
+/-!
+# The letter bound
+
+The first step of the argument: any unifier `S` of a problem `P` can be composed with a
+monotone letter map that fixes the values of the letter-subterms of `P` (the *pins*) and does
+not raise depth, so that the resulting unifier has at most `4 ^ n` letters, where `n` is the
+number of letter-subterms of `P` (`letter_bound`, `letter_bound_strong`).
+
+The argument has three parts.
+
+* *Semantic depth.* `Ty.sdepth T` is the least syntactic letter depth `Ty.ldepth` of a type
+  equivalent to `T`, and `Ty.rep T` is a depth-minimal representative with as few paths as
+  possible. Such a representative is *reduced* (`Ty.rep_reduced`): no path dominates another,
+  so every path of it is matched letterwise up to `≡` in any equivalent type
+  (`Ty.Reduced.exists_path`). The letters of `Ty.rep T` have strictly smaller semantic depth
+  than `T` (`Ty.sdepth_letter_lt`).
+* *The selection lemma* (section `Selection`). Fix the pins and a measure `μ` that is
+  subadditive for meets and joins. The *profile* of a type `x` is the pair (pins below `x`,
+  pins above `x`). For a profile `q`, `g_q` (`gsel`) is the meet of measure-minimal
+  representatives of the profiles `≥ q` with no greater minimal measure, and `c_q` (`csel`)
+  is the join of the `g_r` over the profiles `r ≤ q` with no greater minimal measure. The
+  selection map `ψ x := c_{p(x)}` (`psel`) is monotone (`psel_mono`), fixes the pins up to
+  `≡` (`psel_pin`), does not increase the measure (`measure_psel_le`) and takes at most
+  `4 ^ |pins|` values (`psel_image`).
+* *The transfer lemma* (section `Transfer`). Given a selection `ψ`, `rebuild g` replaces, in
+  the representative of `g`, every letter `k` by `rebuild (ψ k)`, recursively along the
+  measure. The map `c := rebuild ∘ ψ` is monotone and commutes with `mapLetters c` on the
+  pins (`transfer`), which is exactly what `Problem.mapLetters_solves` needs.
+
+Instantiating the measure with the semantic depth gives the letter map `letterMap` and the
+list `letterList` of its possible values, of length at most `4 ^ n`, closed under taking
+letters, with the semantic depth strictly decreasing along letters.
+-/
+
 namespace Intersection
 
 open Classical
@@ -142,6 +176,7 @@ theorem Ty.rep_paths_length_le {x T : Ty} (h : Eqv x T) (hd : x.ldepth = T.sdept
   unfold Ty.rep; rw [(Classical.choose_spec (Nat.find_spec T.exists_rep)).2.2]
   exact Nat.find_min' T.exists_rep ⟨x, h, hd, rfl⟩
 
+/-- Semantic depth is invariant under equivalence. -/
 theorem Ty.sdepth_congr {T T' : Ty} (h : Eqv T T') : T.sdepth = T'.sdepth := by
   apply le_antisymm
   · rw [← Ty.ldepth_rep T']; exact Ty.sdepth_le ((Ty.rep_eqv T').trans h.symm)
@@ -157,11 +192,13 @@ theorem Ty.sdepth_letter_lt {T : Ty} {π : List Ty × Ty} (h : π ∈ T.rep.path
   rw [Ty.ldepth_rep] at *
   omega
 
+/-- Meets do not increase the semantic depth. -/
 theorem Ty.sdepth_inter_le (A B : Ty) :
     (Ty.inter A B).sdepth ≤ max A.sdepth B.sdepth := by
   have := Ty.sdepth_le (Eqv.inter (Ty.rep_eqv A) (Ty.rep_eqv B))
   simpa [Ty.ldepth, Ty.ldepth_rep] using this
 
+/-- Joins do not increase the syntactic depth. -/
 theorem Ty.ldepth_join_le (A B : Ty) : (A.join B).ldepth ≤ max A.ldepth B.ldepth := by
   refine Ty.ldepth_interList_le.2 fun x hx => ?_
   simp only [List.mem_map, Ty.joinPaths, List.mem_flatMap, List.mem_filter, Bool.and_eq_true,
@@ -180,6 +217,7 @@ theorem Ty.join_eqv {A A' B B' : Ty} (hA : Eqv A A') (hB : Eqv B B') :
     Eqv (A.join B) (A'.join B') :=
   ⟨Ty.join_mono hA.1 hB.1, Ty.join_mono hA.2 hB.2⟩
 
+/-- Joins do not increase the semantic depth. -/
 theorem Ty.sdepth_join_le (A B : Ty) : (A.join B).sdepth ≤ max A.sdepth B.sdepth := by
   have := Ty.sdepth_le (Ty.join_eqv (Ty.rep_eqv A) (Ty.rep_eqv B))
   have := Ty.ldepth_join_le A.rep B.rep
@@ -195,6 +233,7 @@ def PathLe (p' p : List Ty × Ty) : Prop :=
 /-- No path is dominated by a different path. -/
 def Ty.Reduced (x : Ty) : Prop := ∀ p ∈ x.paths, ∀ p' ∈ x.paths, PathLe p' p → p' = p
 
+/-- Depth-minimal representatives with fewest paths are reduced. -/
 theorem Ty.rep_reduced (T : Ty) : T.rep.Reduced := by
   intro p hp p' hp' hle
   by_contra hne
@@ -294,9 +333,10 @@ theorem measure_foldr_le (μ : Ty → ℕ) {op : Ty → Ty → Ty}
     have := ih fun x hx => hl x (by simp [hx])
     omega
 
-/-! ## Lemma 2: the selection lemma
+/-! ## The selection lemma
 
-Fix a list of pins and a measure `μ` with `μ (A ∩ B) ≤ max` and `μ (A ⊔ B) ≤ max`. -/
+Fix a list of pins and a measure `μ` with `μ (A ∩ B) ≤ max (μ A) (μ B)` and
+`μ (A ⊔ B) ≤ max (μ A) (μ B)`. -/
 
 section Selection
 
@@ -309,7 +349,7 @@ abbrev Profile (n : ℕ) := Finset (Fin n) × Finset (Fin n)
 noncomputable def profile (x : Ty) : Profile pins.length :=
   (Finset.univ.filter fun i => Le (pins.get i) x, Finset.univ.filter fun i => Le x (pins.get i))
 
-/-- Order on profiles. -/
+/-- Order on profiles: more pins below, fewer pins above. -/
 def PLe {n : ℕ} (q q' : Profile n) : Prop := q.1 ⊆ q'.1 ∧ q'.2 ⊆ q.2
 
 theorem PLe.refl {n : ℕ} (q : Profile n) : PLe q q := ⟨subset_refl _, subset_refl _⟩
@@ -390,13 +430,13 @@ theorem gsel_le_xmin (q : Profile pins.length) : Le (gsel μ pins q) (xmin μ pi
 theorem gsel_le_csel (q : Profile pins.length) : Le (gsel μ pins q) (csel μ pins q) :=
   ((csel_le_iff μ pins).1 (Le.refl _)).1
 
-/-- Lemma 2 (a), first half. -/
+/-- `g_q` lies in the interval of `q`. -/
 theorem gsel_mem {q : Profile pins.length} (hq : NE pins q) : InI pins q (gsel μ pins q) := by
   refine ⟨fun i hi => (le_gsel_iff μ pins).2 ⟨(xmin_spec μ pins hq).1.1 i hi,
     fun s hs hqs _ => (xmin_spec μ pins hs).1.1 i (hqs.1 hi)⟩, fun i hi => ?_⟩
   exact (gsel_le_xmin μ pins q).trans ((xmin_spec μ pins hq).1.2 i hi)
 
-/-- Lemma 2 (a). -/
+/-- `c_q` lies in the interval of `q`. -/
 theorem csel_mem {q : Profile pins.length} (hq : NE pins q) : InI pins q (csel μ pins q) := by
   refine ⟨fun i hi => ((gsel_mem μ pins hq).1 i hi).trans (gsel_le_csel μ pins q),
     fun i hi => (csel_le_iff μ pins).2 ⟨(gsel_mem μ pins hq).2 i hi,
@@ -412,7 +452,7 @@ theorem measure_gsel_le (hinter : ∀ A B, μ (Ty.inter A B) ≤ max (μ A) (μ 
   exact (xmin_spec μ pins hs).2.le.trans hd
 
 variable {μ} in
-/-- Lemma 2 (b). -/
+/-- The measure of `c_q` is the least measure over the interval of `q`. -/
 theorem measure_csel (hinter : ∀ A B, μ (Ty.inter A B) ≤ max (μ A) (μ B))
     (hjoin : ∀ A B, μ (Ty.join A B) ≤ max (μ A) (μ B))
     {q : Profile pins.length} (hq : NE pins q) : μ (csel μ pins q) = dmin μ pins q := by
@@ -429,7 +469,7 @@ theorem gsel_le_gsel {r q : Profile pins.length} (hq : NE pins q) (hrq : PLe r q
   refine (le_gsel_iff μ pins).2 ⟨key.2 q hq hrq hd, fun s hs hqs hds => ?_⟩
   exact key.2 s hs (hrq.trans hqs) (hds.trans hd)
 
-/-- Lemma 2 (c). -/
+/-- `c` is monotone in the profile. -/
 theorem csel_mono {q q' : Profile pins.length} (hq : NE pins q) (hq' : NE pins q')
     (h : PLe q q') :
     Le (csel μ pins q) (csel μ pins q') := by
@@ -452,11 +492,11 @@ theorem profile_mono {x x' : Ty} (h : Le x x') : PLe (profile pins x) (profile p
     true_and] at hi ⊢
   exacts [hi.trans h, h.trans hi]
 
-/-- Lemma 2 (d): monotonicity of `ψ`. -/
+/-- The selection map `ψ` is monotone. -/
 theorem psel_mono : MonoMap (psel μ pins) := fun _ _ h =>
   csel_mono μ pins (profile_ne pins _) (profile_ne pins _) (profile_mono pins h)
 
-/-- Lemma 2 (d): `ψ` fixes the pins up to equivalence. -/
+/-- The selection map `ψ` fixes the pins up to equivalence. -/
 theorem psel_pin {π : Ty} (hπ : π ∈ pins) : Eqv (psel μ pins π) π := by
   obtain ⟨i, rfl⟩ := List.get_of_mem hπ
   have hm := csel_mem μ pins (profile_ne pins (pins.get i))
@@ -465,14 +505,14 @@ theorem psel_pin {π : Ty} (hπ : π ∈ pins) : Eqv (psel μ pins π) π := by
   exact ⟨hm.2 i h2, hm.1 i h1⟩
 
 variable {μ} in
-/-- Lemma 2 (d): `ψ` does not increase the measure. -/
+/-- The selection map `ψ` does not increase the measure. -/
 theorem measure_psel_le (hinter : ∀ A B, μ (Ty.inter A B) ≤ max (μ A) (μ B))
     (hjoin : ∀ A B, μ (Ty.join A B) ≤ max (μ A) (μ B)) (k : Ty) :
     μ (psel μ pins k) ≤ μ k := by
   rw [psel, measure_csel pins hinter hjoin (profile_ne pins k)]
   exact dmin_le μ pins (profile_mem pins k)
 
-/-- The realized (nonempty) profiles, as a list. -/
+/-- The realised (nonempty) profiles, as a list. -/
 noncomputable def neProfiles : List (Profile pins.length) :=
   (Finset.univ.filter fun q => NE pins q).toList
 
@@ -485,13 +525,13 @@ theorem neProfiles_length : (neProfiles pins).length ≤ 4 ^ pins.length := by
 theorem profile_mem_neProfiles (x : Ty) : profile pins x ∈ neProfiles pins := by
   simp [neProfiles, profile_ne]
 
-/-- Lemma 2 (d): the image of `ψ` lies in a list of length `≤ 4 ^ |pins|`. -/
+/-- The image of `ψ` lies in a list of length `≤ 4 ^ |pins|`. -/
 theorem psel_image (x : Ty) : psel μ pins x ∈ (neProfiles pins).map (csel μ pins) :=
   List.mem_map_of_mem (profile_mem_neProfiles pins x)
 
 end Selection
 
-/-! ## Lemma 1: the transfer lemma
+/-! ## The transfer lemma
 
 Abstract setting: a measure `μ`, a representative function `rep` with `Eqv (rep T) T` whose
 letters have smaller measure, and a selection `ψ` that does not increase the measure. -/
@@ -500,8 +540,9 @@ section Transfer
 
 variable (μ : Ty → ℕ) (rep : Ty → Ty) (ψ : Ty → Ty)
 
-/-- The rebuild `R g`: the representative of `g` with each letter `k` replaced by
-`R (ψ k)`. (The guard is always satisfied under the hypotheses of the lemmas below.) -/
+/-- The rebuild of `g`: the representative of `g` with each letter `k` replaced by the rebuild
+of `ψ k`. (The guard is always satisfied under the hypotheses of the lemmas below; it makes
+the recursion terminate along `μ`.) -/
 noncomputable def rebuild (g : Ty) : Ty :=
   Ty.interList ((rep g).paths.map fun π =>
     pathTy (π.1.map fun k => if _h : μ (ψ k) < μ g then rebuild (ψ k) else .omega, π.2))
@@ -509,6 +550,7 @@ termination_by μ g
 
 variable {μ rep ψ}
 
+/-- The recursive equation of the rebuild. -/
 theorem rebuild_eq (hrep : ∀ T, ∀ π ∈ (rep T).paths, ∀ k ∈ π.1, μ k < μ T)
     (hψ : ∀ k, μ (ψ k) ≤ μ k) (g : Ty) :
     rebuild μ rep ψ g = (rep g).mapLetters fun k => rebuild μ rep ψ (ψ k) := by
@@ -519,6 +561,7 @@ theorem rebuild_eq (hrep : ∀ T, ∀ π ∈ (rep T).paths, ∀ k ∈ π.1, μ k
   have := hψ k
   simp only [show μ (ψ k) < μ g by omega, ↓reduceDIte]
 
+/-- The rebuild is monotone. -/
 theorem rebuild_mono (hrepE : ∀ T, Eqv (rep T) T)
     (hrep : ∀ T, ∀ π ∈ (rep T).paths, ∀ k ∈ π.1, μ k < μ T)
     (hψ : ∀ k, μ (ψ k) ≤ μ k) (hψm : MonoMap ψ) :
@@ -540,8 +583,8 @@ theorem rebuild_mono (hrepE : ∀ T, Eqv (rep T) T)
     have := hψ b
     exact ih _ _ (by omega) (hψm a b hab)
 
-/-- Lemma 1 (transfer): `c := R ∘ ψ` is monotone and commutes with `mapLetters` on the
-pins. -/
+/-- **The transfer lemma.** `c := rebuild ∘ ψ` is monotone and commutes with `mapLetters c` on
+the pins. -/
 theorem transfer (hrepE : ∀ T, Eqv (rep T) T)
     (hrep : ∀ T, ∀ π ∈ (rep T).paths, ∀ k ∈ π.1, μ k < μ T)
     (hψ : ∀ k, μ (ψ k) ≤ μ k) (hψm : MonoMap ψ) {pins : List Ty}
@@ -554,7 +597,7 @@ theorem transfer (hrepE : ∀ T, Eqv (rep T) T)
   rw [rebuild_eq hrep hψ]
   exact Ty.mapLetters_eqv hc ((hrepE _).trans (hpin π hπ))
 
-/-- The letters of the (syntactic) paths of `R g` are of the form `R (ψ k)`. -/
+/-- The letters of the (syntactic) paths of the rebuild of `g` are rebuilds of some `ψ k`. -/
 theorem rebuild_letters (hrep : ∀ T, ∀ π ∈ (rep T).paths, ∀ k ∈ π.1, μ k < μ T)
     (hψ : ∀ k, μ (ψ k) ≤ μ k) {g : Ty} {π : List Ty × Ty}
     (hπ : π ∈ (rebuild μ rep ψ g).paths) {k : Ty} (hk : k ∈ π.1) :
@@ -584,7 +627,8 @@ theorem Problem.mem_letterSubterms {P : Problem} {σ τ : Ty} (h : P.IsSubterm (
 /-- The pins of a solution: values of the letter-subterms. -/
 def Problem.pins (P : Problem) (S : ℕ → Ty) : List Ty := P.letterSubterms.map (·.subst S)
 
-/-- The letter map produced by Lemmas 1 and 2 for the semantic depth. -/
+/-- The letter map: the transfer lemma applied to the selection lemma, with the semantic depth
+as the measure. -/
 noncomputable def letterMap (pins : List Ty) (θ : Ty) : Ty :=
   rebuild Ty.sdepth Ty.rep (psel Ty.sdepth pins) (psel Ty.sdepth pins θ)
 
@@ -593,14 +637,19 @@ noncomputable def letterList (pins : List Ty) : List Ty :=
   ((neProfiles pins).map (csel Ty.sdepth pins)).map
     (rebuild Ty.sdepth Ty.rep (psel Ty.sdepth pins))
 
+/-- The semantic depth strictly decreases along the letters of a representative. -/
 theorem rep_letter_lt : ∀ T, ∀ π ∈ (Ty.rep T).paths, ∀ k ∈ π.1, k.sdepth < T.sdepth :=
   fun _ _ hπ _ hk => Ty.sdepth_letter_lt hπ hk
 
+/-- The selection map does not increase the semantic depth. -/
 theorem sdepth_psel_le (pins : List Ty) (k : Ty) :
     (psel Ty.sdepth pins k).sdepth ≤ k.sdepth :=
   measure_psel_le pins Ty.sdepth_inter_le Ty.sdepth_join_le k
 
-/-- Strong form of the letter bound. -/
+/-- **The letter bound**, strong form: the letter map `c` is monotone, `S` composed with `c` is
+again a unifier, the values of `c` lie in the list `L` of at most `4 ^ n` types, `L` is
+closed under taking letters (literally, and up to `≡` for the depth-minimal
+representatives), and the semantic depth strictly decreases along letters. -/
 theorem letter_bound_strong (P : Problem) (S : ℕ → Ty)
     (hS : ∀ e ∈ P, Eqv (e.1.subst S) (e.2.subst S)) :
     let c := letterMap (P.pins S)
@@ -638,7 +687,7 @@ theorem letter_bound_strong (P : Problem) (S : ℕ → Ty)
     obtain ⟨k', hk', hkk'⟩ := forall₂_exists_of_mem f k hk
     exact ⟨k', hlit l hl q hq k' hk', hkk'⟩
 
-/-- **Letter bound.** Any solution `S` of `P` can be transformed by a monotone letter map
+/-- **The letter bound.** Any solution `S` of `P` can be transformed by a monotone letter map
 `c` into a solution whose letters all lie (up to `≡`) in a letter-closed list `L` of at
 most `4 ^ n` types (`n` the number of letter-subterms of `P`), along whose letters the
 semantic depth strictly decreases. -/

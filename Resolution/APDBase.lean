@@ -4,12 +4,28 @@ import Mathlib.Data.Fintype.Pi
 import Mathlib.Data.Fintype.Sum
 
 /-!
-# The abstract problem AP(D): base definitions
+# The abstract problem: base definitions
 
-For `D : GammaData P` we index the letter set `Γ` by `Fin D.m`, define the ranks
-`D.rk i := (D.G i).sdepth`, prove `D.rk i < D.m`, define the projections `D.phi r` (the least
-upper bound of rank `≤ r`) and prove Lemma 0 of `research_C.md`. Finally we define the
-multi-level problem `APD.mlp D`.
+Given `D : GammaData P`, this file sets up the data over which the abstract problem is posed
+and shows that the problem is an instance of the multi-level problems of `Resolution.MLP`.
+
+* The letters of `D.Γ` are indexed by `Fin D.m`, and the *rank* `D.rk i` of a letter is its
+  semantic depth. Ranks are below the number of letters (`GammaData.rk_lt`), because the
+  letter set is closed under taking letters and the depth decreases along them.
+* The *upgrade maps* `D.phi r` send a letter to the least letter of rank `≤ r` above it. They
+  are idempotent and compatible (`phi_idem`, `phi_phi`, `phi_phi'`); a letter of rank `r + 1`
+  lies below a word iff it lies below the upgrade of the word to rank `r`
+  (`le_path_phi_iff`), and a letter of rank `0` lies below no nonempty word
+  (`eq_nil_of_rk_zero`). The upgrade maps are the projections of the multi-level problem.
+* The abstract problem labels every *entity* (subterm of `P`) and every letter, at every word
+  `w` over the letters, with a set of constants: the constants `a` with `S(e) ≤ (w; a)`. The
+  labels must satisfy node conditions `APD.NV`, parent–child conditions `APD.CV` and root
+  conditions `APD.RV`, which mirror the path characterisation of subtyping. The multi-level
+  problem `APD.mlp D` has one lower level per rank, carrying the labels of the letters of
+  that rank, read through the upgrade maps.
+
+The file also collects general path lemmas used by the completeness and the realisation in
+`Resolution.APD`.
 -/
 
 namespace Intersection
@@ -199,6 +215,7 @@ theorem G_mem (i : Fin D.m) : D.G i ∈ D.Γ := List.get_mem _ _
 
 theorem exists_G {g : Ty} (h : g ∈ D.Γ) : ∃ i, D.G i = g := List.get_of_mem h
 
+/-- Equivalent letters are equal, since `Γ` is deduplicated. -/
 theorem eq_of_eqv {i j : Fin D.m} (h : Eqv (D.G i) (D.G j)) : i = j := by
   have hp := List.pairwise_iff_get.1 D.nodup
   rcases lt_trichotomy i j with hij | hij | hij
@@ -234,8 +251,9 @@ theorem sdepth_interList_le {l : List Ty} {r : ℕ} (h : ∀ x ∈ l, x.sdepth �
     simp only [Ty.interList]
     omega
 
-/-! ## Goal 1: ranks are below the number of letters -/
+/-! ## Ranks are below the number of letters -/
 
+/-- Every rank below the rank of a letter is the rank of some letter. -/
 theorem exists_rk_of_le {i : Fin D.m} : ∀ d, d ≤ D.rk i → ∃ j, D.rk j = d := by
   suffices H : ∀ k, k ≤ D.rk i → ∃ j, D.rk j = D.rk i - k by
     intro d hd
@@ -254,7 +272,7 @@ theorem exists_rk_of_le {i : Fin D.m} : ∀ d, d ≤ D.rk i → ∃ j, D.rk j = 
     obtain ⟨j', hj''⟩ := D.exists_eqv_G hg' e'
     exact ⟨j', by rw [rk, ← Ty.sdepth_congr hj'', e]⟩
 
-/-- **Goal 1.** Every rank is smaller than the number of letters. -/
+/-- Every rank is smaller than the number of letters. -/
 theorem rk_lt (i : Fin D.m) : D.rk i < D.m := by
   have H : ∀ d : Fin (D.rk i + 1), ∃ j, D.rk j = d.val := fun d =>
     D.exists_rk_of_le (i := i) d.val (by omega)
@@ -264,7 +282,7 @@ theorem rk_lt (i : Fin D.m) : D.rk i < D.m := by
   rw [Fintype.card_fin, Fintype.card_fin] at this
   omega
 
-/-! ## Goal 2: projections -/
+/-! ## The upgrade maps -/
 
 /-- The defining property of `phi r i`: the least letter of rank `≤ r` above `G i`. -/
 def PhiSpec (r : ℕ) (i j : Fin D.m) : Prop :=
@@ -290,7 +308,7 @@ theorem PhiSpec.unique {r : ℕ} {i j j' : Fin D.m} (h : D.PhiSpec r i j)
     (h' : D.PhiSpec r i j') : j = j' :=
   D.eq_of_eqv ⟨h.2.2 j' h'.1 h'.2.1, h'.2.2 j h.1 h.2.1⟩
 
-/-- The projection to rank `≤ r`: the least letter of rank `≤ r` above `G i`. -/
+/-- The upgrade map to rank `≤ r`: the least letter of rank `≤ r` above `G i`. -/
 noncomputable def phi (r : ℕ) (i : Fin D.m) : Fin D.m := Classical.choose (D.exists_phi r i)
 
 theorem phi_spec (r : ℕ) (i : Fin D.m) : D.PhiSpec r i (D.phi r i) :=
@@ -309,15 +327,18 @@ theorem phi_of_rk_le {r : ℕ} {i : Fin D.m} (h : D.rk i ≤ r) : D.phi r i = i 
 theorem phi_idem (r : ℕ) (i : Fin D.m) : D.phi r (D.phi r i) = D.phi r i :=
   D.phi_of_rk_le (D.rk_phi_le r i)
 
+/-- Upgrading to rank `s ≤ r` after upgrading to rank `r` is upgrading to rank `s`. -/
 theorem phi_phi {s r : ℕ} (hsr : s ≤ r) (i : Fin D.m) : D.phi s (D.phi r i) = D.phi s i := by
   refine PhiSpec.unique D ⟨D.rk_phi_le s _, (D.le_phi r i).trans (D.le_phi s _),
     fun k hk hik => ?_⟩ (D.phi_spec s i)
   exact D.phi_le hk (D.phi_le (by omega) hik)
 
+/-- Upgrading to rank `r ≥ s` after upgrading to rank `s` does nothing. -/
 theorem phi_phi' {s r : ℕ} (hsr : s ≤ r) (i : Fin D.m) : D.phi r (D.phi s i) = D.phi s i :=
   D.phi_of_rk_le ((D.rk_phi_le s i).trans hsr)
 
-/-- **Lemma 0 (iii)**, positive rank. -/
+/-- A letter of rank `r + 1` lies below a word iff it lies below the upgrade of the word to
+rank `r`. -/
 theorem le_path_phi_iff {g : Fin D.m} {r : ℕ} (hg : D.rk g = r + 1) (w : List (Fin D.m))
     (c : ℕ) : Le (D.G g) (pathTy (w.map D.G, .const c)) ↔
       Le (D.G g) (pathTy ((w.map (D.phi r)).map D.G, .const c)) := by
@@ -340,7 +361,7 @@ theorem le_path_phi_iff {g : Fin D.m} {r : ℕ} (hg : D.rk g = r + 1) (w : List 
     rw [List.map_map, List.forall₂_map_left_iff, List.forall₂_map_right_iff]
     exact List.forall₂_same.2 fun x _ => D.le_phi r x
 
-/-- **Lemma 0 (iii)**, rank zero. -/
+/-- A letter of rank `0` lies below no nonempty word. -/
 theorem eq_nil_of_rk_zero {g : Fin D.m} (hg : D.rk g = 0) {w : List (Fin D.m)} {c : ℕ}
     (h : Le (D.G g) (pathTy (w.map D.G, .const c))) : w = [] := by
   have h' := (Ty.rep_eqv (D.G g)).1.trans h
@@ -354,7 +375,7 @@ theorem eq_nil_of_rk_zero {g : Fin D.m} (hg : D.rk g = 0) {w : List (Fin D.m)} {
 
 end GammaData
 
-/-! ## Goal 3: the multi-level problem -/
+/-! ## The multi-level problem -/
 
 namespace APD
 
@@ -366,7 +387,10 @@ abbrev Lab (P : Problem) := Finset (Fin P.consts.length)
 /-- Top-level states: labels of all entities and all letters. -/
 abbrev State (D : GammaData P) := Fin P.entities.length ⊕ Fin D.m → Lab P
 
-/-- Node-wise conditions. -/
+/-- Node conditions at a word: the label of an intersection is the union of the labels of its
+parts, `ω` has the empty label, the two sides of an equation have equal labels, the domain of
+an arrow has the label of the letter equivalent to its value, labels are antitone in the
+letters, and the labels of the letters of rank `r + 1` are read from level `r`. -/
 def NV (q : State D) (ι : Fin D.m → Fin D.m → Lab P) : Prop :=
   (∀ e e₁ e₂, P.entities.get e = .inter (P.entities.get e₁) (P.entities.get e₂) →
       q (.inl e) = q (.inl e₁) ∪ q (.inl e₂)) ∧
@@ -379,7 +403,9 @@ def NV (q : State D) (ι : Fin D.m → Fin D.m → Lab P) : Prop :=
   (∀ (r : Fin D.m) i, D.rk i = r.val + 1 → q (.inr i) = ι r i) ∧
   (∀ (r : Fin D.m) i, D.rk i ≠ r.val + 1 → ι r i = ∅)
 
-/-- Parent–child conditions (`q` at `w`, `q'` at `h :: w`). -/
+/-- Parent–child conditions (`q` at `w`, `q'` at `h :: w`): the label of an arrow `σ → τ` at
+`h :: w` is the label of `τ` at `w` if `h` is below the letter of `σ`, and empty otherwise;
+constants and letters of rank `0` have empty labels at nonempty words. -/
 def CV (q : State D) (h : Fin D.m) (q' : State D) : Prop :=
   (∀ e e₁ e₂ j, P.entities.get e = .arrow (P.entities.get e₁) (P.entities.get e₂) →
       Eqv ((P.entities.get e₁).subst D.S) (D.G j) →
@@ -387,12 +413,15 @@ def CV (q : State D) (h : Fin D.m) (q' : State D) : Prop :=
   (∀ e c, P.entities.get e = .const c → q' (.inl e) = ∅) ∧
   (∀ i, D.rk i = 0 → q' (.inr i) = ∅)
 
-/-- Root conditions. -/
+/-- Root conditions: arrows have empty labels at the empty word, and a constant is labelled by
+itself. -/
 def RV (q : State D) : Prop :=
   (∀ e σ τ, P.entities.get e = .arrow σ τ → q (.inl e) = ∅) ∧
   (∀ e k, P.entities.get e = .const (P.consts.get k) → q (.inl e) = {k})
 
-/-- The multi-level problem AP(D). -/
+/-- The abstract problem as a multi-level problem: the alphabet is the letters, there is one
+lower level per rank, the projections are the upgrade maps, and the top states are the
+labellings of the entities and the letters. -/
 noncomputable def mlp : MLP where
   Γ := Fin D.m
   R := D.m

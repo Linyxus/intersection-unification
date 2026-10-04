@@ -1,18 +1,25 @@
-import Intersection
-import Resolution.Paths
-import Resolution.Computability
-import Resolution.Lattice
-import Resolution.LetterMap
-import Resolution.LetterBound
-import Resolution.GammaExists
-import Resolution.Tower
-import Resolution.Decide
-import Resolution.APD
 import Resolution.Final
 
 /-!
-The two theorems; prove one of them. Keep their names and statements. Put helper
-definitions and lemmas in modules under `Resolution/` imported from here, or in this file.
+# Intersection type unification is decidable
+
+The main theorem: unifiability of intersection types with constants, modulo BCD subtyping
+(`Intersection.Unifiable`, defined in `Intersection.Basic`), is a computable predicate. The
+proof is assembled in `Resolution.Final`; this file states the result in the form in which it
+is cited.
+
+The modules under `Resolution/`, in dependency order:
+
+* `Paths`: the path normal form and the verified subtyping decider `Ty.leb`.
+* `Computability`: the decider and the constructors are primitive recursive.
+* `Lattice`: the join of two types.
+* `LetterMap`: letter maps and the transfer of unifiers along them.
+* `LetterBound`: the selection lemma, the transfer lemma and the letter bound.
+* `GammaData`, `GammaExists`: the finite letter set `Γ`.
+* `MLP`, `Tower`: multi-level problems and their small-model theorem.
+* `APDBase`, `APD`: the abstract problem, its completeness and its realisation.
+* `Decide`: the bounded search and decidability from a bound.
+* `Final`: the bound `bigBound` and the final assembly.
 -/
 
 namespace Intersection
@@ -21,10 +28,5 @@ namespace Intersection
 problem, whether it has a unifier. -/
 theorem decidable : ComputablePred Unifiable := by
   exact decidable_final
-
-/-- Unifiability of intersection types is undecidable: no algorithm decides, for every
-problem, whether it has a unifier. -/
-theorem undecidable : ¬ ComputablePred Unifiable := by
-  sorry
 
 end Intersection

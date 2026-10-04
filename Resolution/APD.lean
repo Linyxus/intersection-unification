@@ -2,7 +2,26 @@ import Resolution.APDBase
 import Mathlib.Tactic.GCongr
 
 /-!
-# AP(D): completeness (Lemma 1) and realization (Lemma 2)
+# The abstract problem: completeness and realisation
+
+The two directions of the correspondence between unifiers and solutions of the abstract
+problem `APD.mlp D`.
+
+* *Completeness of the abstract problem* (`APD.complete`). From the unifier `D.S` packaged in
+  `D : GammaData P`, the canonical labelling `APD.lab T w` (the constants `a` with
+  `T ≤ (w; a)`) of all entities and letters is a solution of `APD.mlp D`, zero beyond the
+  total path length `APD.compN D`.
+* *The realisation* (`APD.realize`). Conversely, a solution of `APD.mlp D` of support `N`
+  yields a ground unifier of `P` over the constants of `P`. The realised letters `APD.T` are
+  defined by recursion on the rank as the meet (`meetOf`) of the paths `(w; a)` over the words
+  `w` of lower rank and the stored labels `a`; the realised entities `APD.U` are the same meet
+  over all words; and the realised substitution `APD.Sr` sends a variable to the realised
+  entity of that variable. The realised letters are monotone in the letters (`APD.T_mono`),
+  and the realised substitution agrees with the realised entities on every entity
+  (`APD.subst_eqv_U`). All values have size at most `realizeBound N |Γ| |consts|`.
+
+The size bound `realizeBound` and the generic tools (`Ty.GroundOver`, `words`, `meetOf`) are
+defined in between.
 -/
 
 namespace Intersection
@@ -72,6 +91,7 @@ theorem le_sum_of_mem' {l : List ℕ} {x : ℕ} (h : x ∈ l) : x ≤ l.sum := b
     · simp
     · have := ih h; simp; omega
 
+/-- Labels vanish beyond the total path length. -/
 theorem lab_eq_empty {T : Ty} {w : List (Fin D.m)} (hw : plen T < w.length) :
     lab D T w = ∅ := by
   ext k
@@ -100,6 +120,7 @@ noncomputable def canonL (w : List (Fin D.m)) : State D := fun x => lab D (ent D
 noncomputable def canonF (r : Fin D.m) (w : List (Fin D.m)) : Fin D.m → Lab P :=
   fun i => if D.rk i = r.val + 1 then lab D (D.G i) w else ∅
 
+/-- The canonical labelling satisfies the node conditions. -/
 theorem canon_nv (w : List (Fin D.m)) :
     NV D (canonL D w) (fun r => canonF D r (w.map (D.phi r.val))) := by
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
@@ -124,6 +145,7 @@ theorem canon_nv (w : List (Fin D.m)) :
   · intro r i hi
     simp only [canonF, hi, ↓reduceIte]
 
+/-- The canonical labelling satisfies the parent–child conditions. -/
 theorem canon_cv (w : List (Fin D.m)) (h : Fin D.m) :
     CV D (canonL D w) h (canonL D (h :: w)) := by
   refine ⟨?_, ?_, ?_⟩
@@ -140,6 +162,7 @@ theorem canon_cv (w : List (Fin D.m)) (h : Fin D.m) :
     intro h'
     exact List.cons_ne_nil _ _ (D.eq_nil_of_rk_zero hi h')
 
+/-- The canonical labelling satisfies the root conditions. -/
 theorem canon_rv : RV D (canonL D []) := by
   refine ⟨?_, ?_⟩
   · intro e σ τ he
@@ -161,7 +184,7 @@ theorem canon_supp (w : List (Fin D.m)) (hw : compN D ≤ w.length) :
   · exact lab_eq_empty D (H (.inr i))
   · rfl
 
-/-- The canonical solution (Lemma 1). -/
+/-- The canonical solution. -/
 noncomputable def canon : (mlp D).Sol (compN D) where
   f := canonF D
   L := canonL D
@@ -169,12 +192,13 @@ noncomputable def canon : (mlp D).Sol (compN D) where
   root := canon_rv D
   supp w hw := canon_supp D w hw
 
-/-- **Completeness** (research_C, Lemma 1). -/
+/-- **Completeness of the abstract problem.** The abstract problem of a `GammaData` has a
+solution. -/
 theorem complete (D : GammaData P) : ∃ N, Nonempty ((mlp D).Sol N) :=
   ⟨_, ⟨canon D⟩⟩
 end APD
 
-/-! ## Generic tools for the realization -/
+/-! ## Generic tools for the realisation -/
 
 /-- Ground types over a list of constants: no variables, all constants in `A`. -/
 def Ty.GroundOver (A : List ℕ) : Ty → Prop
@@ -261,8 +285,9 @@ theorem length_words_le {α : Type*} (L : List α) : ∀ n, (words L n).length �
 /-- The meet of the paths `(w.map T; c)` over the words `w ∈ ws` and labels `c ∈ lab w`. -/
 def meetOf {α : Type*} (A : List ℕ) (ws : List (List α)) (lab : List α → Finset (Fin A.length))
     (T : α → Ty) : Ty :=
-  Ty.interList (ws.flatMap fun w => ((List.finRange A.length).filter fun c => decide (c ∈ lab w)).map
-    fun c => pathTy (w.map T, .const (A.get c)))
+  Ty.interList (ws.flatMap fun w =>
+    ((List.finRange A.length).filter fun c => decide (c ∈ lab w)).map
+      fun c => pathTy (w.map T, .const (A.get c)))
 
 section meetOf
 
@@ -347,12 +372,12 @@ end meetOf
 
 /-! ## The size bound -/
 
-/-- Size bound for the realized letters of rank `< d`. -/
+/-- Size bound for the realised letters of rank `< d`. -/
 def tbAux (N m a : ℕ) : ℕ → ℕ
   | 0 => 0
   | d + 1 => (m + 1) ^ N * a * (N * (tbAux N m a d + 1) + 2) + 1
 
-/-- The size bound of the realization (`N` support, `m` letters, `a` constants). -/
+/-- The size bound of the realisation (`N` support, `m` letters, `a` constants). -/
 def realizeBound (N m a : ℕ) : ℕ := tbAux N m a (m + 1)
 
 theorem tbAux_succ_le (N m a d : ℕ) : tbAux N m a d ≤ tbAux N m a (d + 1) := by
@@ -388,7 +413,7 @@ namespace APD
 
 variable {P : Problem} (D : GammaData P)
 
-/-! ## Realization (Lemma 2) -/
+/-! ## The realisation -/
 
 section Realize
 
@@ -456,12 +481,12 @@ theorem length_low_le (i : Fin D.m) : (low D i).length ≤ D.m :=
 
 variable (s)
 
-/-- Approximations of the realized letters. -/
+/-- Approximations of the realised letters, by recursion on the rank. -/
 noncomputable def Tlev : ℕ → Fin D.m → Ty
   | 0 => fun _ => .omega
   | n + 1 => fun i => meetOf P.consts (words (low D i) N) (fun w => SL D s w (.inr i)) (Tlev n)
 
-/-- The realized letters `T i`. -/
+/-- The realised letters `T i`. -/
 noncomputable def T (i : Fin D.m) : Ty := Tlev D s (D.rk i + 1) i
 
 theorem Tlev_succ (n : ℕ) (i : Fin D.m) : Tlev D s (n + 1) i =
@@ -478,6 +503,7 @@ theorem Tlev_stable : ∀ n i, D.rk i < n → Tlev D s n i = T D s i := by
     have hx' := mem_low.1 ((mem_words.1 hw).2 x hx)
     rw [ih n' (by omega) x (by omega), ih (D.rk i) (by omega) x hx']
 
+/-- The recursive equation of the realised letters. -/
 theorem T_eq (i : Fin D.m) :
     T D s i = meetOf P.consts (words (low D i) N) (fun w => SL D s w (.inr i)) (T D s) := by
   rw [T, Tlev_succ]
@@ -531,7 +557,7 @@ theorem T_mono_aux : ∀ n (i j : Fin D.m), D.rk i + D.rk j < n → Le (D.G i) (
       have h2 := D.rk_phi_le r x
       exact ih x _ (by omega) (D.le_phi r x)
 
-/-- **Lemma 2 (a).** -/
+/-- The realised letters are monotone in the letters. -/
 theorem T_mono {i j : Fin D.m} (h : Le (D.G i) (D.G j)) : Le (T D s i) (T D s j) :=
   T_mono_aux _ i j (Nat.lt_succ_self _) h
 
@@ -548,7 +574,7 @@ theorem T_le_path {i : Fin D.m} {w : List (Fin D.m)} {c : Fin P.consts.length}
 
 variable (D s)
 
-/-- The realized entities. -/
+/-- The realised entities. -/
 noncomputable def U (x : Fin P.entities.length ⊕ Fin D.m) : Ty :=
   meetOf P.consts (words (List.finRange D.m) N) (fun w => SL D s w x) (T D s)
 
@@ -564,7 +590,7 @@ theorem le_U_iff {X : Ty} {x} : Le X (U D s x) ↔
   exact ⟨fun h w c hc => h w (mem_words.2 ⟨lt_of_mem_sl hc, fun y _ => List.mem_finRange y⟩) c hc,
     fun h w _ c hc => h w c hc⟩
 
-/-- **Lemma 2 (b).** -/
+/-- The realised entity of a letter is the realised letter. -/
 theorem U_inr (i : Fin D.m) : Eqv (U D s (.inr i)) (T D s i) := by
   constructor
   · rw [T_eq D s i]
@@ -576,7 +602,7 @@ theorem U_congr {x y} (h : ∀ w, SL D s w x = SL D s w y) : U D s x = U D s y :
 
 variable (D s)
 
-/-- The realized substitution. -/
+/-- The realised substitution. -/
 noncomputable def Sr (x : ℕ) : Ty :=
   if h : ∃ e, P.entities.get e = .var x then U D s (.inl (Classical.choose h)) else .omega
 
@@ -585,7 +611,7 @@ variable {D s}
 theorem exists_idx {σ : Ty} (h : σ ∈ P.entities) : ∃ e, P.entities.get e = σ :=
   List.get_of_mem h
 
-/-- **Lemma 2 (c)**, with the structural induction over subterms. -/
+/-- The realised substitution agrees with the realised entities on every entity. -/
 theorem subst_eqv_U : ∀ (σ : Ty) (e : Fin P.entities.length), P.entities.get e = σ →
     Eqv (σ.subst (Sr D s)) (U D s (.inl e)) := by
   intro σ
@@ -675,6 +701,7 @@ theorem subst_eqv_U : ∀ (σ : Ty) (e : Fin P.entities.length), P.entities.get 
         exacts [h1 w c hc, h2 w c hc]
     exact (Eqv.inter (ihσ e₁ he₁) (ihτ e₂ he₂)).trans key.symm
 
+/-- The realised substitution is a unifier. -/
 theorem Sr_solves : ∀ p ∈ P, Eqv (p.1.subst (Sr D s)) (p.2.subst (Sr D s)) := by
   intro p hp
   obtain ⟨e₁, he₁⟩ := exists_idx (Problem.mem_entities.2 ⟨p, hp, Or.inl (Ty.mem_subterms_self _)⟩)
@@ -687,6 +714,7 @@ theorem Sr_solves : ∀ p ∈ P, Eqv (p.1.subst (Sr D s)) (p.2.subst (Sr D s)) :
 
 /-! ### Groundness and size -/
 
+/-- The realised letters are ground over the constants of `P`. -/
 theorem T_ground (i : Fin D.m) : (T D s i).GroundOver P.consts := by
   induction hn : D.rk i using Nat.strong_induction_on generalizing i with
   | _ n ih =>
@@ -694,6 +722,7 @@ theorem T_ground (i : Fin D.m) : (T D s i).GroundOver P.consts := by
     refine groundOver_meetOf fun w hw x hx => ?_
     exact ih _ (hn ▸ mem_low.1 ((mem_words.1 hw).2 x hx)) x rfl
 
+/-- The size of a realised letter is bounded in terms of its rank. -/
 theorem T_size (i : Fin D.m) :
     (T D s i).size ≤ tbAux N D.m P.consts.length (D.rk i + 1) := by
   induction hn : D.rk i using Nat.strong_induction_on generalizing i with
@@ -727,8 +756,8 @@ theorem Sr_spec (x : ℕ) : (Sr D s x).size ≤ realizeBound N D.m P.consts.leng
 
 end Realize
 
-/-- **Realization** (research_C, Lemma 2), with size bounds: a solution of AP(D) with support
-`N` yields a ground solution of `P` over the constants of `P` whose values have size at most
+/-- **The realisation**, with size bounds: a solution of the abstract problem with support `N`
+yields a ground solution of `P` over the constants of `P` whose values have size at most
 `realizeBound N |Γ| |consts P|`. -/
 theorem realize (D : GammaData P) {N : ℕ} (s : (mlp D).Sol N) :
     ∃ S' : ℕ → Ty, (∀ e ∈ P, Eqv (e.1.subst S') (e.2.subst S')) ∧

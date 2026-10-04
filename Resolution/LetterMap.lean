@@ -1,14 +1,22 @@
 import Resolution.Paths
 
-namespace Intersection
-
 /-!
 # Letter maps
 
-`T.mapLetters c` applies `c` to every letter of every path of `T`. For monotone `c` this is
-monotone in `T`, and it commutes with substitution on the subterms of a problem provided it
-agrees with `c` on the (substituted) letters of the problem.
+The first step of the argument transforms an arbitrary unifier into one whose letters come
+from a finite set. The transformation is a *letter map*: `T.mapLetters c` applies `c` to every
+letter of every path of `T`. For monotone `c` this is monotone in `T` (`Ty.mapLetters_mono`),
+and it commutes with substitution on the subterms of a problem provided `c` agrees with
+`mapLetters c` on the substituted letters of the problem (`Problem.mapLetters_subst`). Hence
+a unifier `S` composed letterwise with such a `c` is again a unifier
+(`Problem.mapLetters_solves`). Which `c` to use is the business of the selection lemma and
+the transfer lemma in `Resolution.LetterBound`.
+
+The file also defines the subterms of a type and of a problem (`Ty.subterms`,
+`Problem.IsSubterm`).
 -/
+
+namespace Intersection
 
 /-- Apply `c` to every letter of every path. -/
 def Ty.mapLetters (c : Ty → Ty) (T : Ty) : Ty :=
@@ -17,6 +25,7 @@ def Ty.mapLetters (c : Ty → Ty) (T : Ty) : Ty :=
 /-- Monotonicity of a map on types. -/
 def MonoMap (c : Ty → Ty) : Prop := ∀ θ θ', Le θ θ' → Le (c θ) (c θ')
 
+/-- A monotone letter map is monotone on types. -/
 theorem Ty.mapLetters_mono {c : Ty → Ty} (hc : MonoMap c) {T T' : Ty} (h : Le T T') :
     Le (T.mapLetters c) (T'.mapLetters c) := by
   rw [Ty.le_iff_leb, Ty.leb_iff] at h
@@ -36,15 +45,18 @@ theorem Ty.mapLetters_eqv {c : Ty → Ty} (hc : MonoMap c) {T T' : Ty} (h : Eqv 
 
 /-! ## Congruence helpers -/
 
+/-- `Eqv` is a congruence for intersections. -/
 theorem Eqv.inter {σ σ' τ τ' : Ty} (h₁ : Eqv σ σ') (h₂ : Eqv τ τ') :
     Eqv (.inter σ τ) (.inter σ' τ') :=
   ⟨Le.inter_glb ((Le.inter_left _ _).trans h₁.1) ((Le.inter_right _ _).trans h₂.1),
     Le.inter_glb ((Le.inter_left _ _).trans h₁.2) ((Le.inter_right _ _).trans h₂.2)⟩
 
+/-- `Eqv` is a congruence for arrows. -/
 theorem Eqv.arrow {σ σ' τ τ' : Ty} (h₁ : Eqv σ σ') (h₂ : Eqv τ τ') :
     Eqv (.arrow σ τ) (.arrow σ' τ') :=
   ⟨Le.arrow h₁.2 h₂.1, Le.arrow h₁.1 h₂.2⟩
 
+/-- The intersection of an appended list is the intersection of the two intersections. -/
 theorem interList_append (l₁ l₂ : List Ty) :
     Eqv (Ty.interList (l₁ ++ l₂)) (.inter (Ty.interList l₁) (Ty.interList l₂)) := by
   refine ⟨Le.inter_glb (le_interList_iff.2 fun x hx => interList_le_of_mem (by simp [hx]))
@@ -54,6 +66,7 @@ theorem interList_append (l₁ l₂ : List Ty) :
   · exact (Le.inter_left _ _).trans (interList_le_of_mem hx)
   · exact (Le.inter_right _ _).trans (interList_le_of_mem hx)
 
+/-- Arrows with a common domain distribute over intersections. -/
 theorem interList_map_arrow (ρ : Ty) (l : List Ty) :
     Eqv (Ty.interList (l.map (Ty.arrow ρ))) (Ty.arrow ρ (Ty.interList l)) := by
   refine ⟨interList_map_arrow_le ρ l, le_interList_iff.2 fun x hx => ?_⟩
@@ -62,12 +75,14 @@ theorem interList_map_arrow (ρ : Ty) (l : List Ty) :
 
 /-! ## Structural lemmas -/
 
+/-- `mapLetters` distributes over intersections. -/
 theorem Ty.mapLetters_inter (c : Ty → Ty) (A B : Ty) :
     Eqv ((Ty.inter A B).mapLetters c) (.inter (A.mapLetters c) (B.mapLetters c)) := by
   unfold Ty.mapLetters
   rw [Ty.paths, List.map_append]
   exact interList_append _ _
 
+/-- `mapLetters` applies `c` to the domain of an arrow and recurses into the codomain. -/
 theorem Ty.mapLetters_arrow (c : Ty → Ty) (ρ τ : Ty) :
     Eqv ((Ty.arrow ρ τ).mapLetters c) (.arrow (c ρ) (τ.mapLetters c)) := by
   unfold Ty.mapLetters
@@ -98,6 +113,7 @@ def Ty.subterms : Ty → List Ty
 theorem Ty.mem_subterms_self (σ : Ty) : σ ∈ σ.subterms := by
   cases σ <;> simp [Ty.subterms]
 
+/-- Being a subterm is transitive. -/
 theorem Ty.mem_subterms_trans {ρ σ τ : Ty} (h₁ : ρ ∈ σ.subterms) (h₂ : σ ∈ τ.subterms) :
     ρ ∈ τ.subterms := by
   induction τ with
@@ -153,7 +169,7 @@ theorem Problem.mapLetters_subst (P : Problem) (S : ℕ → Ty) (c : Ty → Ty)
   obtain ⟨e, he, h'⟩ := hσ
   exact ⟨e, he, h'.imp (Ty.mem_subterms_trans h) (Ty.mem_subterms_trans h)⟩
 
-/-- Corollary: the letter-mapped substitution is again a unifier. -/
+/-- The letter-mapped substitution is again a unifier. -/
 theorem Problem.mapLetters_solves (P : Problem) (S : ℕ → Ty) {c : Ty → Ty} (hc : MonoMap c)
     (H : ∀ σ τ, P.IsSubterm (Ty.arrow σ τ) →
       Eqv (c (σ.subst S)) ((σ.subst S).mapLetters c))
@@ -165,6 +181,7 @@ theorem Problem.mapLetters_solves (P : Problem) (S : ℕ → Ty) {c : Ty → Ty}
   have h₂ := P.mapLetters_subst S c H (σ := e.2) ⟨e, he, Or.inr (Ty.mem_subterms_self _)⟩
   exact h₁.symm.trans ((Ty.mapLetters_eqv hc (hS e he)).trans h₂)
 
+/-- Unifiability witnessed by a letter-mapped unifier. -/
 theorem Problem.unifiable_of_mapLetters (P : Problem) (S : ℕ → Ty) {c : Ty → Ty}
     (hc : MonoMap c)
     (H : ∀ σ τ, P.IsSubterm (Ty.arrow σ τ) →

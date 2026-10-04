@@ -3,9 +3,11 @@ import Resolution.Paths
 /-!
 # Primitive recursiveness of the subtyping algorithm
 
-Relative to `Primcodable Ty` (encoding `Ty.toNat`): constructors, case analysis (`Ty.view`,
-`Ty.elim`), structural recursion (`Ty.primrec_of_rec`), `Ty.size`, `Ty.paths`, and the main
-result `Ty.primrec_leb : Primrec₂ Ty.leb`, with corollaries for `Le` and `Eqv`.
+The computability half of the result. Relative to `Primcodable Ty` (the numbering `Ty.toNat`),
+the constructors, case analysis (`Ty.view`, `Ty.elim`), structural recursion
+(`Ty.primrec_of_rec`), `Ty.size` and `Ty.paths` are primitive recursive, and so is the
+subtyping decider of `Resolution.Paths`: `Ty.primrec_leb : Primrec₂ Ty.leb`, with corollaries
+for `Le` and `Eqv`. The bounded search of `Resolution.Decide` is built from these.
 -/
 
 namespace Intersection
@@ -20,30 +22,33 @@ theorem Ty.ofNat_eq (n : ℕ) : Denumerable.ofNat Ty n = Ty.ofNat n := by
   rw [Ty.decode_eq] at this
   exact (Option.some.inj this).symm
 
+/-- The numbering of types is primitive recursive. -/
 theorem Ty.primrec_toNat : Primrec Ty.toNat := Primrec.encode
 theorem Ty.primrec_ofNat : Primrec Ty.ofNat :=
   (Primrec.ofNat Ty).of_eq Ty.ofNat_eq
 
 open Primrec in
 theorem Ty.primrec_const : Primrec Ty.const :=
-  Primrec.encode_iff.1 <| (nat_add.comp (nat_mul.comp (Primrec.const 4) .id) (Primrec.const 1)).of_eq
-    fun _ => rfl
+  Primrec.encode_iff.1 <|
+    (nat_add.comp (nat_mul.comp (Primrec.const 4) .id) (Primrec.const 1)).of_eq fun _ => rfl
 
 open Primrec in
 theorem Ty.primrec_var : Primrec Ty.var :=
-  Primrec.encode_iff.1 <| (nat_add.comp (nat_mul.comp (Primrec.const 4) .id) (Primrec.const 2)).of_eq
-    fun _ => rfl
+  Primrec.encode_iff.1 <|
+    (nat_add.comp (nat_mul.comp (Primrec.const 4) .id) (Primrec.const 2)).of_eq fun _ => rfl
 
 open Primrec in
 theorem Ty.primrec_arrow : Primrec₂ Ty.arrow :=
   Primrec₂.encode_iff.1 <| (nat_add.comp (nat_mul.comp (Primrec.const 4)
-    (Primrec₂.natPair.comp (Primrec.encode.comp Primrec.fst) (Primrec.encode.comp Primrec.snd))) (Primrec.const 3)).of_eq
+    (Primrec₂.natPair.comp (Primrec.encode.comp Primrec.fst)
+      (Primrec.encode.comp Primrec.snd))) (Primrec.const 3)).of_eq
     fun _ => rfl
 
 open Primrec in
 theorem Ty.primrec_inter : Primrec₂ Ty.inter :=
   Primrec₂.encode_iff.1 <| (nat_add.comp (nat_mul.comp (Primrec.const 4)
-    (Primrec₂.natPair.comp (Primrec.encode.comp Primrec.fst) (Primrec.encode.comp Primrec.snd))) (Primrec.const 4)).of_eq
+    (Primrec₂.natPair.comp (Primrec.encode.comp Primrec.fst)
+      (Primrec.encode.comp Primrec.snd))) (Primrec.const 4)).of_eq
     fun _ => rfl
 
 theorem Ty.primrec_omega {α : Type*} [Primcodable α] : Primrec fun _ : α => Ty.omega :=
@@ -72,7 +77,8 @@ def Ty.viewNat (n : ℕ) : Unit ⊕ ℕ ⊕ ℕ ⊕ (Ty × Ty) ⊕ (Ty × Ty) :=
     bif m % 4 == 1 then .inr (.inr (.inl (m / 4))) else
     bif m % 4 == 2 then
       .inr (.inr (.inr (.inl (Ty.ofNat (Nat.unpair (m / 4)).1, Ty.ofNat (Nat.unpair (m / 4)).2))))
-    else .inr (.inr (.inr (.inr (Ty.ofNat (Nat.unpair (m / 4)).1, Ty.ofNat (Nat.unpair (m / 4)).2))))
+    else .inr (.inr (.inr (.inr
+      (Ty.ofNat (Nat.unpair (m / 4)).1, Ty.ofNat (Nat.unpair (m / 4)).2))))
 
 open Primrec in
 theorem Ty.primrec_viewNat : Primrec Ty.viewNat := by
@@ -84,7 +90,8 @@ theorem Ty.primrec_viewNat : Primrec Ty.viewNat := by
       (Ty.primrec_ofNat.comp (snd.comp (unpair.comp hq)))
   refine nat_casesOn₁ _ ?_
   refine cond (Primrec.beq.comp hr (Primrec.const 0)) (sumInr.comp (sumInl.comp hq)) ?_
-  refine cond (Primrec.beq.comp hr (Primrec.const 1)) (sumInr.comp (sumInr.comp (sumInl.comp hq))) ?_
+  refine cond (Primrec.beq.comp hr (Primrec.const 1))
+    (sumInr.comp (sumInr.comp (sumInl.comp hq))) ?_
   refine cond (Primrec.beq.comp hr (Primrec.const 2))
     (sumInr.comp (sumInr.comp (sumInr.comp (sumInl.comp hp)))) ?_
   exact sumInr.comp (sumInr.comp (sumInr.comp (sumInr.comp hp)))
@@ -101,6 +108,7 @@ theorem Ty.view_ofNat (n : ℕ) : (Ty.ofNat n).view = Ty.viewNat n := by
 theorem Ty.view_eq (σ : Ty) : σ.view = Ty.viewNat σ.toNat := by
   rw [← Ty.view_ofNat, Ty.ofNat_toNat]
 
+/-- Case analysis on types is primitive recursive. -/
 theorem Ty.primrec_view : Primrec Ty.view :=
   (Ty.primrec_viewNat.comp Ty.primrec_toNat).of_eq fun σ => (Ty.view_eq σ).symm
 
@@ -183,6 +191,7 @@ section Elim
 variable {α σ : Type*} [Primcodable α] [Primcodable σ]
 open Primrec
 
+/-- One step of case analysis is primitive recursive. -/
 theorem Ty.primrec_elim {f : α → Ty} {g0 : α → σ} {gc gv : α → ℕ → σ}
     {ga gi : α → Ty × Ty → σ} (hf : Primrec f) (h0 : Primrec g0) (hc : Primrec₂ gc)
     (hv : Primrec₂ gv) (ha : Primrec₂ ga) (hi : Primrec₂ gi) :
@@ -238,6 +247,7 @@ theorem Ty.primrec_of_rec {σ : Type*} [Primcodable σ] (f : Ty → σ)
     (fun _ _ h => Ty.toNat_lt_of_mem_children h) H
 
 open Primrec in
+/-- The size of a type is primitive recursive. -/
 theorem Ty.primrec_size : Primrec Ty.size :=
   Ty.primrec_of_rec Ty.size (g := fun _ rs => some (rs.sum + 1))
     (option_some.comp (succ.comp (primrec_list_sum.comp snd))).to₂ fun τ => by
@@ -270,6 +280,7 @@ theorem Ty.primrec_pathsStep : Primrec₂ Ty.pathsStep := by
       (Primrec.const 0)) ((list_getD ([] : List (List Ty × Ty))).comp (snd.comp fst)
       (Primrec.const 1))
 
+/-- The paths of a type are primitive recursive. -/
 theorem Ty.primrec_paths : Primrec Ty.paths :=
   Ty.primrec_of_rec Ty.paths (Primrec.option_some.comp Ty.primrec_pathsStep).to₂ fun τ => by
     cases τ <;> simp [Ty.pathsStep, Ty.elim, Ty.paths]
@@ -379,7 +390,7 @@ theorem Ty.lebStep_spec (b : Ty × Ty) :
   · rintro ⟨q, -, rfl, h⟩; exact h
   · intro h; exact ⟨p, hp, rfl, h⟩
 
-/-- Main result: the subtyping decision procedure is primitive recursive. -/
+/-- **The subtyping decider is primitive recursive.** -/
 theorem Ty.primrec_leb : Primrec₂ Ty.leb :=
   Primrec.nat_omega_rec' (fun b : Ty × Ty => b.1.leb b.2)
     (m := fun b => b.1.size + b.2.size) (l := fun b => Ty.lebPairs b.1 b.2)
@@ -403,8 +414,10 @@ theorem Ty.primrec_decide_eqv : Primrec₂ fun σ τ : Ty => decide (Eqv σ τ) 
   (Primrec.and.comp Ty.primrec_leb Ty.primrec_leb.swap).to₂.of_eq fun σ τ =>
     (Ty.decide_eqv σ τ).symm
 
+/-- Subtyping is a primitive recursive relation. -/
 theorem primrecRel_le : PrimrecRel Le := primrecRel_iff_primrec_decide.2 Ty.primrec_decide_le
 
+/-- Type equality is a primitive recursive relation. -/
 theorem primrecRel_eqv : PrimrecRel Eqv := primrecRel_iff_primrec_decide.2 Ty.primrec_decide_eqv
 
 theorem Ty.computable_leb : Computable₂ Ty.leb := Ty.primrec_leb.to_comp

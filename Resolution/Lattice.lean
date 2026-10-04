@@ -1,14 +1,18 @@
 import Resolution.Paths
 
-namespace Intersection
-
 /-!
 # Joins of intersection types
 
 The join of `A` and `B` is the intersection of the letterwise intersections of all pairs of
 same-shape paths (same atom, same length) of `A` and `B`. It is the least upper bound of `A`
-and `B` for BCD subtyping.
+and `B` for BCD subtyping (`Ty.join_le_iff`).
+
+The join is needed by the selection lemma of `Resolution.LetterBound`, whose map `c_q` is a
+join of meets; that joins do not increase the letter depth (`Ty.ldepth_join_le`, proved
+there) is what makes the selection lemma depth-preserving.
 -/
+
+namespace Intersection
 
 /-- Path characterization of subtyping, with `Le` on letters. -/
 theorem le_iff_paths {σ τ : Ty} : Le σ τ ↔ ∀ π' ∈ τ.paths, ∃ π ∈ σ.paths,
@@ -32,16 +36,19 @@ theorem Ty.mem_joinPaths {A B : Ty} {p q : List Ty × Ty} (hp : p ∈ A.paths)
     decide_eq_true_eq, beq_iff_eq]
   exact ⟨p, hp, q, ⟨hq, e, hl⟩, rfl⟩
 
+/-- Letterwise meets lie below the left operands. -/
 theorem forall₂_zipWith_left : ∀ {l₁ l₂ : List Ty}, l₁.length = l₂.length →
     List.Forall₂ (fun a b => Le a b) (List.zipWith Ty.inter l₁ l₂) l₁
   | [], [], _ => .nil
   | _ :: _, _ :: _, h => .cons (Le.inter_left _ _) (forall₂_zipWith_left (by simpa using h))
 
+/-- Letterwise meets lie below the right operands. -/
 theorem forall₂_zipWith_right : ∀ {l₁ l₂ : List Ty}, l₁.length = l₂.length →
     List.Forall₂ (fun a b => Le a b) (List.zipWith Ty.inter l₁ l₂) l₂
   | [], [], _ => .nil
   | _ :: _, _ :: _, h => .cons (Le.inter_right _ _) (forall₂_zipWith_right (by simpa using h))
 
+/-- A common lower bound of two letter lists lies below their letterwise meet. -/
 theorem forall₂_le_zipWith : ∀ {r l₁ l₂ : List Ty},
     List.Forall₂ (fun a b => Le a b) r l₁ → List.Forall₂ (fun a b => Le a b) r l₂ →
     List.Forall₂ (fun a b => Le a b) r (List.zipWith Ty.inter l₁ l₂)
@@ -49,6 +56,7 @@ theorem forall₂_le_zipWith : ∀ {r l₁ l₂ : List Ty},
   | _ :: _, _ :: _, _ :: _, .cons h₁ t₁, .cons h₂ t₂ =>
     .cons (Le.inter_glb h₁ h₂) (forall₂_le_zipWith t₁ t₂)
 
+/-- The join is an upper bound of its left operand. -/
 theorem Ty.le_join_left (A B : Ty) : Le A (A.join B) := by
   refine le_interList_iff.2 fun x hx => ?_
   simp only [List.mem_map, Ty.joinPaths, List.mem_flatMap, List.mem_filter, Bool.and_eq_true,
@@ -56,6 +64,7 @@ theorem Ty.le_join_left (A B : Ty) : Le A (A.join B) := by
   obtain ⟨_, ⟨p, hp, q, ⟨-, -, hl⟩, rfl⟩, rfl⟩ := hx
   exact (le_pathTy hp).trans (pathTy_le_pathTy p.2 (forall₂_zipWith_left hl))
 
+/-- The join is an upper bound of its right operand. -/
 theorem Ty.le_join_right (A B : Ty) : Le B (A.join B) := by
   refine le_interList_iff.2 fun x hx => ?_
   simp only [List.mem_map, Ty.joinPaths, List.mem_flatMap, List.mem_filter, Bool.and_eq_true,
@@ -78,6 +87,7 @@ theorem Ty.join_le {A B θ : Ty} (hA : Le A θ) (hB : Le B θ) : Le (A.join B) �
   rw [ep]
   exact pathTy_le_pathTy a (forall₂_le_zipWith fp fq)
 
+/-- The universal property of the join. -/
 theorem Ty.join_le_iff {A B θ : Ty} : Le (A.join B) θ ↔ Le A θ ∧ Le B θ :=
   ⟨fun h => ⟨(Ty.le_join_left A B).trans h, (Ty.le_join_right A B).trans h⟩,
     fun h => Ty.join_le h.1 h.2⟩
@@ -88,13 +98,16 @@ theorem Ty.join_mono_left {A A' : Ty} (B : Ty) (h : Le A A') : Le (A.join B) (A'
 theorem Ty.join_mono_right (A : Ty) {B B' : Ty} (h : Le B B') : Le (A.join B) (A.join B') :=
   Ty.join_le (Ty.le_join_left _ _) (h.trans (Ty.le_join_right _ _))
 
+/-- The join is monotone. -/
 theorem Ty.join_mono {A A' B B' : Ty} (hA : Le A A') (hB : Le B B') :
     Le (A.join B) (A'.join B') :=
   (Ty.join_mono_left B hA).trans (Ty.join_mono_right A' hB)
 
+/-- The join is idempotent up to equivalence. -/
 theorem Ty.join_self (A : Ty) : Eqv (A.join A) A :=
   ⟨Ty.join_le (Le.refl A) (Le.refl A), Ty.le_join_left A A⟩
 
+/-- The join is commutative up to equivalence. -/
 theorem Ty.join_comm (A B : Ty) : Eqv (A.join B) (B.join A) :=
   ⟨Ty.join_le (Ty.le_join_right _ _) (Ty.le_join_left _ _),
     Ty.join_le (Ty.le_join_right _ _) (Ty.le_join_left _ _)⟩

@@ -2,14 +2,37 @@ import Resolution.MLP
 import Mathlib
 
 /-!
-# Small model theorem for multi-level problems
+# The small-model theorem for multi-level problems
+
+A multi-level problem `M` with a solution of some support `N` has a solution of support
+`towerBound fmax M.R (card M.Q)`, where `M.R` is the number of lower levels, `M.Q` the top
+state type and `fmax` bounds the sizes of the lower label types (`MLP.small_model`). The bound
+does not depend on `N`.
+
+The proof eliminates the lower levels one at a time, from the highest down.
+
+* *Elimination of a level* (section `Elim`). The last lower level is absorbed into the top
+  level by the acceptance-set construction: the new alphabet is the image of the last
+  projection, and a new top state is a pair of a label of the last level and a set of old top
+  states, the states that admit a run below the current word (`MLP.elim`). *Completeness*
+  (`MLP.complete`) turns a solution of `M` into one of the eliminated problem with the same
+  support; *soundness* (`MLP.sound`) turns a solution of the eliminated problem of support
+  `N'` into one of `M` of support `N' + card M.Q`, choosing children inside the stored sets
+  and, beyond depth `N'`, following the canonical children `MLP.next`.
+* *The bottom* (section `Zero`). With no lower levels the inputs are constant, and a solution
+  can be pumped: the states from which a finite run exists form the acceptance set `MLP.Acc`,
+  computed by iterating `MLP.accStep` `card M.Q` times (`MLP.Kset`), and the run `MLP.nextRun`
+  along `MLP.next` reaches the zero state within `card M.Q` steps (`MLP.base`).
+
+`MLP.small_model_aux` puts the two together by induction on the number of lower levels.
 -/
 
 namespace Intersection
 
 open Classical
 
-/-- The tower bound. -/
+/-- The tower bound: `towerBound fmax R q` is the support obtained after eliminating `R` lower
+levels from a problem with `q` top states and lower label types of size `≤ fmax`. -/
 def towerBound (fmax : ℕ) : ℕ → ℕ → ℕ
   | 0, q => q
   | R + 1, q => towerBound fmax R (fmax * 2 ^ q) + q + 1
@@ -38,13 +61,17 @@ section Zero
 
 variable (M : MLP)
 
+/-- One step of the acceptance-set construction: add the states with a transition into `S`
+under zero input. -/
 noncomputable def accStep (S : Finset M.Q) : Finset M.Q :=
   S ∪ Finset.univ.filter (fun q => ∃ ch : M.Γ → M.Q, (∀ x, ch x ∈ S) ∧ M.Δ q M.zF ch)
 
+/-- The states admitting a zero-input run of depth `≤ j`. -/
 noncomputable def Kset : ℕ → Finset M.Q
   | 0 => {M.zQ}
   | j + 1 => M.accStep (Kset j)
 
+/-- The acceptance set: the states admitting a finite zero-input run. -/
 noncomputable def Acc : Finset M.Q := M.Kset (Fintype.card M.Q)
 
 lemma Kset_succ_sub (j : ℕ) : M.Kset j ⊆ M.Kset (j+1) := Finset.subset_union_left
@@ -71,6 +98,7 @@ lemma Kset_card_or (n : ℕ) :
         omega
     · right; exact ⟨j, by omega, hj'⟩
 
+/-- The acceptance set is the limit of `Kset`. -/
 lemma Kset_sub_Acc (m : ℕ) : M.Kset m ⊆ M.Acc := by
   rcases M.Kset_card_or (Fintype.card M.Q) with h | ⟨j, hj, hj'⟩
   · have := Finset.card_le_univ (M.Kset (Fintype.card M.Q)); omega
@@ -80,6 +108,7 @@ lemma Kset_sub_Acc (m : ℕ) : M.Kset m ⊆ M.Acc := by
       rw [M.Kset_stable hj' i]
       exact M.Kset_mono hj.le
 
+/-- The least depth of a zero-input run from `p`. -/
 noncomputable def lvl (p : M.Q) : ℕ := sInf {j | p ∈ M.Kset j}
 
 lemma lvl_le {p : M.Q} {j : ℕ} (h : p ∈ M.Kset j) : M.lvl p ≤ j := Nat.sInf_le h
@@ -152,6 +181,7 @@ lemma depth_bound (G : List M.Γ → M.Q) (n : ℕ)
   have h0 := key (w.length - n) w (by omega)
   exact M.eq_zQ_of_lvl (hG w (by omega)).1 (by omega)
 
+/-- The run along `next` from `p`. -/
 noncomputable def nextRun (p : M.Q) : List M.Γ → M.Q
   | [] => p
   | x :: w => M.next (nextRun p w) x
@@ -168,6 +198,7 @@ lemma nextRun_zero {p : M.Q} (hp : p ∈ M.Acc) (w : List M.Γ)
     (hw : Fintype.card M.Q ≤ w.length) : M.nextRun p w = M.zQ :=
   M.depth_bound _ 0 (fun w _ => ⟨M.nextRun_mem hp w, fun _ => rfl⟩) w (by omega)
 
+/-- A state with a finite zero-input run is accepted. -/
 lemma acc_of_run (σ : List M.Γ → M.Q) (hσ : ∀ u, M.Δ (σ u) M.zF (fun x => σ (x :: u)))
     (K : ℕ) (hK : ∀ u, K ≤ u.length → σ u = M.zQ) : σ [] ∈ M.Acc := by
   have : ∀ j u, K ≤ u.length + j → σ u ∈ M.Kset j := by
@@ -182,7 +213,8 @@ lemma acc_of_run (σ : List M.Γ → M.Q) (hσ : ∀ u, M.Δ (σ u) M.zF (fun x 
       exact ⟨fun x => σ (x :: u), fun x => ih _ (by simp; omega), hσ u⟩
   exact M.Kset_sub_Acc K (this K [] (by simp))
 
-/-- Base case: no lower levels. -/
+/-- The bottom of the tower: a problem without lower levels has a solution of support
+`card M.Q` as soon as it has a solution. -/
 theorem base (hR : M.R = 0) {N : ℕ} (s : M.Sol N) : Nonempty (M.Sol (Fintype.card M.Q)) := by
   have hin : ∀ f w, M.input f w = M.zF := fun f w => funext fun r => absurd r.2 (by omega)
   have hp : s.L [] ∈ M.Acc :=
@@ -222,8 +254,10 @@ lemma fin_cases (r : Fin M.R) : (∃ r', r = M.emb R hR r') ∨ r = M.lst R hR :
 /-- The new alphabet: letters fixed by the last projection. -/
 abbrev EΓ : Type := {h : M.Γ // M.φ (M.lst R hR) h = h}
 
+/-- The projection onto the new alphabet. -/
 def proj (x : M.Γ) : M.EΓ R hR := ⟨M.φ (M.lst R hR) x, M.φ_idem _ _⟩
 
+/-- Recombine the inputs of the remaining lower levels with an input of the last one. -/
 def combine (ι : ∀ r : Fin R, M.F (M.emb R hR r)) (F : M.F (M.lst R hR)) : ∀ r, M.F r :=
   fun r => if h : r.1 < R then ι ⟨r.1, h⟩ else
     cast (congrArg M.F (Fin.ext (by simp only [lst]; have := r.2; omega))) F
@@ -241,9 +275,12 @@ lemma combine_zero :
   funext r
   rcases M.fin_cases R hR r with ⟨r', rfl⟩ | rfl <;> simp
 
+/-- The projections of the eliminated problem. -/
 def elimφ (r : Fin R) (x : M.EΓ R hR) : M.EΓ R hR :=
   ⟨M.φ (M.emb R hR r) x.1, M.φ_comp' _ _ (M.emb_le_lst R hR r) _⟩
 
+/-- The transitions of the eliminated problem: every stored state has children inside the
+stored sets of the children, under the recombined input. -/
 def elimΔ (X : M.F (M.lst R hR) × Finset M.Q) (ι : ∀ r : Fin R, M.F (M.emb R hR r))
     (ch : M.EΓ R hR → M.F (M.lst R hR) × Finset M.Q) : Prop :=
   ∀ p ∈ X.2, ∃ pl : M.Γ → M.Q, (∀ x, pl x ∈ (ch (M.proj R hR x)).2) ∧
@@ -272,6 +309,7 @@ noncomputable abbrev elim : MLP where
     rw [M.combine_zero R hR]
     exact (M.next_spec_acc hp).1
 
+/-- The number of top states of the eliminated problem. -/
 lemma card_elim_Q :
     Fintype.card (M.elim R hR).Q = Fintype.card (M.F (M.lst R hR)) * 2 ^ Fintype.card M.Q := by
   show Fintype.card (M.F (M.lst R hR) × Finset M.Q) = _
@@ -299,7 +337,7 @@ lemma input_zero_of_len {N : ℕ} (s : M.Sol N) (w : List M.Γ) (hw : N ≤ w.le
     M.input s.f w = M.zF :=
   funext fun r => (s.supp _ (by simpa using hw)).2 r
 
-/-- Subtree runs at `s0` from `p`. -/
+/-- `p` admits a finite run in the subtree at the word `s0`. -/
 def IsRun {N : ℕ} (s : M.Sol N) (s0 : List M.Γ) (p : M.Q) : Prop :=
   ∃ σ : List M.Γ → M.Q, σ [] = p ∧
     (∀ u, M.Δ (σ u) (M.input s.f (u ++ s0)) (fun x => σ (x :: u))) ∧
@@ -346,7 +384,8 @@ lemma input_complete {N : ℕ} (s : M.Sol N) (t : List (M.EΓ R hR)) :
 lemma isRun_root {N : ℕ} (s : M.Sol N) : M.IsRun s [] (s.L []) :=
   ⟨s.L, rfl, fun u => by simpa using s.step u, N, fun u hu => (s.supp u hu).1⟩
 
-/-- Completeness: a solution of `M` gives a solution of the eliminated problem. -/
+/-- Completeness of the elimination: a solution of `M` gives a solution of the eliminated
+problem with the same support. -/
 noncomputable def complete {N : ℕ} (s : M.Sol N) : (M.elim R hR).Sol N where
   f r t := s.f (M.emb R hR r) (List.map (fun x : M.EΓ R hR => x.1) t)
   L t := (s.f (M.lst R hR) (List.map (fun x : M.EΓ R hR => x.1) t),
@@ -385,6 +424,8 @@ def Good (t : List (M.EΓ R hR)) (p : M.Q) (pl : M.Γ → M.Q) : Prop :=
   (∀ x, pl x ∈ (s'.L (M.proj R hR x :: t)).2) ∧
     M.Δ p (M.combine R hR ((M.elim R hR).input s'.f t) (s'.L t).1) pl
 
+/-- The children chosen by the soundness construction: good children while the stored data is
+nontrivial, the canonical children `next` beyond the support. -/
 noncomputable def pick (t : List (M.EΓ R hR)) (p : M.Q) : M.Γ → M.Q :=
   if N' ≤ t.length ∧ p ∈ M.Acc then M.next p else
   if h : ∃ pl, M.Good R hR s' t p pl then h.choose else fun _ => M.zQ
@@ -413,6 +454,7 @@ lemma pick_good (t : List (M.EΓ R hR)) (p : M.Q) (hp : p ∈ (s'.L t).2) :
 
 lemma root_ex : ∃ p, p ∈ (s'.L []).2 ∧ M.root p := s'.root
 
+/-- The top labelling of the soundness construction. -/
 noncomputable def Lfun : List M.Γ → M.Q
   | [] => (M.root_ex R hR s').choose
   | x :: w => M.pick R hR s' (w.map (M.proj R hR)) (Lfun w) x
@@ -421,6 +463,7 @@ lemma Lfun_mem : ∀ w, M.Lfun R hR s' w ∈ (s'.L (w.map (M.proj R hR))).2
   | [] => (M.root_ex R hR s').choose_spec.1
   | x :: w => (M.pick_good R hR s' _ _ (Lfun_mem w)).1 x
 
+/-- The lower labellings of the soundness construction. -/
 noncomputable def sfun (r : Fin M.R) (w : List M.Γ) : M.F r :=
   M.combine R hR (fun r' => s'.f r' (w.map (M.proj R hR))) (s'.L (w.map (M.proj R hR))).1 r
 
@@ -442,8 +485,8 @@ lemma sfun_input (w : List M.Γ) :
       exact List.map_congr_left (fun x _ => Subtype.ext (M.φ_idem _ x))
     rw [e]
 
-/-- Soundness: a solution of the eliminated problem gives a solution of `M` with depth
-`N' + card Q`. -/
+/-- Soundness of the elimination: a solution of the eliminated problem of support `N'` gives
+a solution of `M` of support `N' + card Q`. -/
 noncomputable def sound : M.Sol (N' + Fintype.card M.Q) where
   f := M.sfun R hR s'
   L := M.Lfun R hR s'
@@ -468,8 +511,9 @@ noncomputable def sound : M.Sol (N' + Fintype.card M.Q) where
       rw [this, h1, M.combine_zero R hR]
 
 end Sound
-/-! ### The small model theorem -/
+/-! ### The small-model theorem -/
 
+/-- The small-model theorem, by induction on the number of lower levels. -/
 theorem small_model_aux : ∀ (R : ℕ) (M : MLP), M.R = R → ∀ {N : ℕ}, M.Sol N →
     ∀ fmax : ℕ, (∀ r, Fintype.card (M.F r) ≤ fmax) →
       Nonempty (M.Sol (towerBound fmax R (Fintype.card M.Q)))
@@ -485,7 +529,8 @@ theorem small_model_aux : ∀ (R : ℕ) (M : MLP), M.R = R → ∀ {N : ℕ}, M.
     show _ ≤ towerBound fmax R (fmax * 2 ^ Fintype.card M.Q) + Fintype.card M.Q + 1
     omega
 
-/-- The small model theorem. -/
+/-- **The small-model theorem.** A multi-level problem with a solution has a solution of
+support `towerBound fmax M.R (card M.Q)`, where `fmax` bounds the lower label types. -/
 theorem small_model (M : MLP) {N : ℕ} (s : M.Sol N) (fmax : ℕ)
     (hf : ∀ r, Fintype.card (M.F r) ≤ fmax) :
     Nonempty (M.Sol (towerBound fmax M.R (Fintype.card M.Q))) :=

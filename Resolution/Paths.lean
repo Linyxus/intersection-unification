@@ -1,9 +1,9 @@
 import Intersection
 
-namespace Intersection
-
 /-!
 # Paths and a decision procedure for BCD subtyping
+
+The foundation of the proof: every later module reasons about subtyping through paths.
 
 Every type is equivalent to an intersection of *paths* `ρ₁ → ⋯ → ρₖ → a` with `a` an atom
 (a constant or a variable). A path is represented as a pair `(ls, a) : List Ty × Ty`, where
@@ -11,8 +11,14 @@ Every type is equivalent to an intersection of *paths* `ρ₁ → ⋯ → ρₖ 
 
 `Ty.leb σ τ` holds iff every path of `τ` is matched by a path of `σ` with the same atom, the
 same length, and letters related contravariantly (letter comparisons as a `List.Forall₂`).
-Main result: `Ty.le_iff_leb : Le σ τ ↔ Ty.leb σ τ = true`.
+The main result is `Ty.le_iff_leb : Le σ τ ↔ Ty.leb σ τ = true`. It makes subtyping and type
+equality decidable (`DecidableRel Le`) and yields the path characterisations used throughout
+(`le_const_iff`, `omega_le_iff`, `Le.arrow_inv`, and `le_iff_paths` in `Resolution.Lattice`).
+The file ends with the stability of subtyping under substitution of variables (`Le.subst`)
+and of constants (`Le.csubst`).
 -/
+
+namespace Intersection
 
 /-- Size of a type (number of constructors). -/
 def Ty.size : Ty → ℕ
@@ -30,6 +36,7 @@ def Ty.paths : Ty → List (List Ty × Ty)
   | .inter σ τ => σ.paths ++ τ.paths
   | .arrow ρ τ => τ.paths.map fun π => (ρ :: π.1, π.2)
 
+/-- The letters of a path of `σ` are smaller than `σ`. -/
 theorem Ty.size_of_mem_paths {σ : Ty} {π : List Ty × Ty} (h : π ∈ σ.paths) :
     ∀ ρ ∈ π.1, ρ.size < σ.size := by
   induction σ generalizing π with
@@ -62,6 +69,7 @@ decreasing_by
   have h2 := Ty.size_of_mem_paths π.2 _ (List.of_mem_zip _hab).2
   omega
 
+/-- The defining equation of `Ty.leb`, unfolded one step. -/
 theorem Ty.leb_iff (σ τ : Ty) : σ.leb τ = true ↔ ∀ π' ∈ τ.paths, ∃ π ∈ σ.paths,
     π.2 = π'.2 ∧ List.Forall₂ (fun a b => a.leb b = true) π'.1 π.1 := by
   rw [Ty.leb.eq_1]
@@ -106,6 +114,7 @@ theorem Ty.leb_refl_aux : ∀ n (σ : Ty), σ.size = n → σ.leb σ = true := b
     have := Ty.size_of_mem_paths hπ x hx
     omega
 
+/-- Reflexivity of the algorithm. -/
 theorem Ty.leb_refl (σ : Ty) : σ.leb σ = true := Ty.leb_refl_aux _ σ rfl
 
 theorem Ty.leb_of_subset {σ τ : Ty} (h : τ.paths ⊆ σ.paths) : σ.leb τ = true := by
@@ -129,10 +138,12 @@ theorem Ty.leb_trans_aux : ∀ n (σ τ ρ : Ty), σ.size + τ.size + ρ.size = 
     have := Ty.size_of_mem_paths h₁' a ha
     exact ih _ (by omega) c b a rfl hcb hba
 
+/-- Transitivity of the algorithm. -/
 theorem Ty.leb_trans {σ τ ρ : Ty} (h₁ : σ.leb τ = true) (h₂ : τ.leb ρ = true) :
     σ.leb ρ = true :=
   Ty.leb_trans_aux _ σ τ ρ rfl h₁ h₂
 
+/-- The algorithm is closed under the arrow rule. -/
 theorem Ty.leb_arrow {σ₁ σ₂ τ₁ τ₂ : Ty} (hσ : σ₂.leb σ₁ = true) (hτ : τ₁.leb τ₂ = true) :
     (Ty.arrow σ₁ τ₁).leb (.arrow σ₂ τ₂) = true := by
   rw [Ty.leb_iff] at hτ ⊢
@@ -142,7 +153,7 @@ theorem Ty.leb_arrow {σ₁ σ₂ τ₁ τ₂ : Ty} (hσ : σ₂.leb σ₁ = tru
   obtain ⟨π', h', e, f⟩ := hτ π hπ
   exact ⟨π', h', e, .cons hσ f⟩
 
-/-- Completeness of the algorithm. -/
+/-- Completeness of the algorithm: derivable subtyping is detected. -/
 theorem Ty.leb_of_le {σ τ : Ty} (h : Le σ τ) : σ.leb τ = true := by
   induction h with
   | refl σ => exact Ty.leb_refl σ
@@ -171,6 +182,7 @@ def Ty.interList : List Ty → Ty
 
 theorem Le.of_eq {σ τ : Ty} (h : σ = τ) : Le σ τ := h ▸ Le.refl σ
 
+/-- A type is below an intersection iff it is below every member. -/
 theorem le_interList_iff {σ : Ty} {l : List Ty} :
     Le σ (Ty.interList l) ↔ ∀ τ ∈ l, Le σ τ := by
   induction l with
@@ -183,6 +195,7 @@ theorem le_interList_iff {σ : Ty} {l : List Ty} :
 theorem interList_le_of_mem {σ : Ty} {l : List Ty} (h : σ ∈ l) : Le (Ty.interList l) σ :=
   le_interList_iff.1 (Le.refl _) σ h
 
+/-- A type is below each of its paths. -/
 theorem le_pathTy {σ : Ty} {π : List Ty × Ty} (h : π ∈ σ.paths) : Le σ (pathTy π) := by
   induction σ generalizing π with
   | const n => simp [Ty.paths] at h; subst h; exact Le.refl _
@@ -205,6 +218,7 @@ theorem interList_map_arrow_le (ρ : Ty) (l : List Ty) :
     exact (Le.inter_glb (Le.inter_left _ _) ((Le.inter_right _ _).trans ih)).trans
       (Le.arrow_inter _ _ _)
 
+/-- A type is above the intersection of its paths. -/
 theorem interList_paths_le (σ : Ty) :
     Le (Ty.interList (σ.paths.map pathTy)) σ := by
   induction σ with
@@ -228,6 +242,7 @@ theorem eqv_interList_paths (σ : Ty) : Eqv σ (Ty.interList (σ.paths.map pathT
     obtain ⟨π, hπ, rfl⟩ := List.mem_map.1 h
     exact le_pathTy hπ, interList_paths_le σ⟩
 
+/-- Paths with the same atom compare contravariantly along their letters. -/
 theorem pathTy_le_pathTy {l l' : List Ty} (a : Ty) (h : List.Forall₂ (fun x y => Le x y) l' l) :
     Le (pathTy (l, a)) (pathTy (l', a)) := by
   induction h with
@@ -253,14 +268,17 @@ theorem Ty.le_of_leb_aux : ∀ n (σ τ : Ty), σ.size + τ.size = n → σ.leb 
     have := Ty.size_of_mem_paths hπ y hy
     exact ih _ (by omega) x y rfl hxy
 
+/-- Soundness of the algorithm. -/
 theorem Ty.le_of_leb {σ τ : Ty} (h : σ.leb τ = true) : Le σ τ := Ty.le_of_leb_aux _ σ τ rfl h
 
-/-- Main theorem: the path algorithm decides BCD subtyping. -/
+/-- **The path criterion.** The path algorithm decides BCD subtyping. -/
 theorem Ty.le_iff_leb (σ τ : Ty) : Le σ τ ↔ σ.leb τ = true :=
   ⟨Ty.leb_of_le, Ty.le_of_leb⟩
 
+/-- Subtyping is decidable. -/
 instance : DecidableRel Le := fun σ τ => decidable_of_iff _ (Ty.le_iff_leb σ τ).symm
 
+/-- Type equality is decidable. -/
 instance (σ τ : Ty) : Decidable (Eqv σ τ) := inferInstanceAs (Decidable (Le σ τ ∧ Le τ σ))
 
 /-! ## Characterization lemmas -/
@@ -269,6 +287,7 @@ theorem le_inter_iff {σ τ₁ τ₂ : Ty} : Le σ (.inter τ₁ τ₂) ↔ Le �
   ⟨fun h => ⟨h.trans (Le.inter_left _ _), h.trans (Le.inter_right _ _)⟩,
     fun h => Le.inter_glb h.1 h.2⟩
 
+/-- A type is below an atom iff the atom is one of its letterless paths. -/
 theorem le_atom_iff {σ a : Ty} (ha : a.paths = [([], a)]) :
     Le σ a ↔ ∃ π ∈ σ.paths, π = ([], a) := by
   rw [Ty.le_iff_leb, Ty.leb_iff, ha]
@@ -291,10 +310,12 @@ theorem le_const_iff_mem {σ : Ty} {n : ℕ} : Le σ (.const n) ↔ ([], .const 
 theorem le_var_iff_mem {σ : Ty} {n : ℕ} : Le σ (.var n) ↔ ([], .var n) ∈ σ.paths := by
   simp [le_var_iff]
 
+/-- Only the types without paths lie above `ω`. -/
 theorem omega_le_iff {σ : Ty} : Le .omega σ ↔ σ.paths = [] := by
   rw [Ty.le_iff_leb, Ty.leb_iff, List.eq_nil_iff_forall_not_mem]
   simp [Ty.paths]
 
+/-- A type is equivalent to `ω` iff it has no paths. -/
 theorem eqv_omega_iff {σ : Ty} : Eqv σ .omega ↔ σ.paths = [] :=
   ⟨fun h => omega_le_iff.1 h.2, fun h => ⟨Le.omega σ, omega_le_iff.2 h⟩⟩
 
@@ -314,6 +335,7 @@ theorem Le.arrow_inv {σ₁ σ₂ τ₁ τ₂ : Ty} (h : Le (.arrow σ₁ τ₁)
 
 /-! ## Substitution stability -/
 
+/-- Subtyping is stable under substitution. -/
 theorem Le.subst (S : ℕ → Ty) {σ τ : Ty} (h : Le σ τ) : Le (σ.subst S) (τ.subst S) := by
   induction h with
   | refl σ => exact Le.refl _
@@ -337,6 +359,7 @@ def Ty.csubst (f : ℕ → Ty) : Ty → Ty
   | .arrow σ τ => .arrow (σ.csubst f) (τ.csubst f)
   | .inter σ τ => .inter (σ.csubst f) (τ.csubst f)
 
+/-- Subtyping is stable under substitution of constants. -/
 theorem Le.csubst (f : ℕ → Ty) {σ τ : Ty} (h : Le σ τ) : Le (σ.csubst f) (τ.csubst f) := by
   induction h with
   | refl σ => exact Le.refl _
@@ -352,7 +375,9 @@ theorem Le.csubst (f : ℕ → Ty) {σ τ : Ty} (h : Le σ τ) : Le (σ.csubst f
 theorem Eqv.csubst (f : ℕ → Ty) {σ τ : Ty} (h : Eqv σ τ) : Eqv (σ.csubst f) (τ.csubst f) :=
   ⟨h.1.csubst f, h.2.csubst f⟩
 
-/-! ## Equivalence helpers -/
+/-! ## Equivalence helpers
+
+`Eqv` is an equivalence relation. -/
 
 theorem Eqv.refl (σ : Ty) : Eqv σ σ := ⟨Le.refl σ, Le.refl σ⟩
 

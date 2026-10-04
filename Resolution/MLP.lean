@@ -2,7 +2,7 @@ import Mathlib.Data.Fintype.Basic
 import Mathlib.Data.Fintype.Card
 
 /-!
-# Multi-level problems (interface)
+# Multi-level problems
 
 A *multi-level problem* consists of a finite alphabet `Γ`, `R` "lower levels" given by
 projections `φ r : Γ → Γ` (for `r : Fin R`, level `r` lives on the words over the image of
@@ -15,11 +15,14 @@ that at every word `w` the transition holds with input `fun r => f r (w.map (φ 
 `fun h => L (h :: w)`, the root condition holds at `[]`, and everything is zero from depth `N` on.
 Words are read from the end: the children of `w` are `h :: w`.
 
-The main theorem about this interface (small model property) is proved in `Resolution.Tower`.
+The abstract problem of `Resolution.APDBase` is an instance (`APD.mlp`). The small-model
+theorem, which bounds the support of a solution independently of `N`, is proved in
+`Resolution.Tower`.
 -/
 
 namespace Intersection
 
+/-- A multi-level problem. -/
 structure MLP where
   Γ : Type
   [instFintypeΓ : Fintype Γ]
