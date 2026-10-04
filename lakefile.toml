@@ -1,0 +1,20 @@
+name = "intersection-unification"
+defaultTargets = ["Resolution"]
+
+[leanOptions]
+pp.unicode.fun = true
+autoImplicit = false
+maxSynthPendingDepth = 3
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.34.0"
+
+# The definitions: intersection types, subtyping, substitution, unification.
+[[lean_lib]]
+name = "Intersection"
+
+# The proof.
+[[lean_lib]]
+name = "Resolution"
